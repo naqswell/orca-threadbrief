@@ -31,8 +31,8 @@ function setup() {
       throw Error(`Unexpected host call ${method}`)
     }}
   }
-  const accept = bindProfiles(orca, {settings:async () => settings, focused:async () => selection})
-  return {workspace, project, calls, data, accept, request:(name, args = {}) => handlers.get(name)(args),
+  const profiles = bindProfiles(orca, {settings:async () => settings, focused:async () => selection})
+  return {workspace, project, calls, data, ...profiles, request:(name, args = {}) => handlers.get(name)(args),
     select:value => {selection = value}, configure:value => {settings = value}}
 }
 

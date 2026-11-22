@@ -18,7 +18,7 @@ async function fixture(t) {
     if (args[1] === 'read') { state.history++; return { orcaSessionId: state.session, entries: [] } }
   }
   const restart = () => {
-    const api = bindSources(orca, { roots, settings: async () => ({ autoOpen: true }), focus: async () => ({ workspace: state.id, host: state.host, tab: 'tab', leaf: 'leaf', kind: 'terminal' }), command, reveal: async () => { state.reveals++ } })
+    const api = bindSources(orca, { roots, settings: async () => ({ autoOpen: true, manualLoad: state.manual }), focus: async () => ({ workspace: state.id, host: state.host, tab: 'tab', leaf: 'leaf', kind: 'terminal' }), command, reveal: async () => { state.reveals++ } })
     t.after(api.stop)
     return api
   }
@@ -42,6 +42,31 @@ test('session exclusion skips all report access, history, workflow, recap and au
   await api.exclusions.set({ ...session, excluded: false })
   await created()
   assert.equal(state.reveals, 1)
+})
+
+test('manual briefs do not touch reports or history until requested for the current selection', async t => {
+  const { state, api, save, created } = await fixture(t)
+  state.manual = true
+  await save()
+  const idle = await api.focused({ listen: true })
+  assert.equal(idle.scope, 'manual')
+  assert.equal((await api.workflowFocused()).scope, 'manual')
+  await created()
+  assert.deepEqual([state.snapshots, state.history, state.reveals], [0, 0, 0])
+  const input = { loadFor: idle.contextKey }
+  assert.equal((await api.focused(input)).summary.goal, 'Shared')
+  const before = [state.snapshots, state.history]
+  assert.ok(before.every(n => n > 0))
+  assert.equal((await api.focused()).scope, 'manual')
+  state.id = 'identity:wt2:local:other'
+  await assert.rejects(api.focused(input), /selection changed/)
+  await assert.rejects(api.workflowFocused(input), /selection changed/)
+  assert.deepEqual([state.snapshots, state.history], before)
+  const target = (await api.exclusions.list()).choices.find(r => r.kind === 'session')
+  await api.exclusions.set({ ...target, excluded: true })
+  const next = await api.focused()
+  assert.equal((await api.focused({ loadFor: next.contextKey })).scope, 'excluded')
+  assert.deepEqual([state.snapshots, state.history], before)
 })
 
 test('overlapping exclusions survive restart, apply to future workspaces, and are not matched by display name', async t => {

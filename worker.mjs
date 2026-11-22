@@ -6,6 +6,7 @@ import { orcaJson } from './session-context.mjs'
 import { bindProfiles } from './profiles.mjs'
 import { bindRecaps } from './recaps.mjs'
 import { inbox, receive } from './profile-imports.mjs'
+import { createConfig } from './settings-config.mjs'
 
 async function reveal() {
   const root = await realpath(dirname(fileURLToPath(import.meta.url)))
@@ -31,16 +32,17 @@ export default function activate(orca) {
   orca.panels.handle('exclusions.list', sources.exclusions.list)
   orca.panels.handle('exclusions.set', sources.exclusions.set)
   const revokeRecap = bindRecaps(orca, { settings, target: sources.recapTarget, source: sources.recapSource, command: orcaJson })
-  const accept = bindProfiles(orca, { settings, focused: sources.workflowFocused })
+  const profiles = bindProfiles(orca, { settings, focused: sources.workflowFocused })
+  const configure = createConfig(orca, sources.exclusions, profiles)
   const pluginDir = dirname(dirname(fileURLToPath(import.meta.url)))
   const key = basename(pluginDir), plugins = dirname(pluginDir)
   let stopImports, released = false
-  if (basename(plugins) === 'plugins' && key.endsWith('.session-summary')) void inbox(key, dirname(plugins)).then(dir => receive(dir, accept, text => orca.log(text))).then(stop => {
+  if (basename(plugins) === 'plugins' && key.endsWith('.session-summary')) void inbox(key, dirname(plugins)).then(dir => receive(dir, profiles.accept, text => orca.log(text), configure)).then(stop => {
     if (released) stop(); else stopImports = stop
   }).catch(error => orca.log(error.message))
   const subscription = orca.settings.onDidChange(({ key }) => {
     if (['historyOutcome', 'pairedHistory', 'summaryStrategy', 'recapAgent', 'recapModel'].includes(key)) revokeRecap()
-    if (key === 'historyOutcome' || key === 'pairedHistory') sources.historyChanged()
+    if (key === 'historyOutcome' || key === 'pairedHistory' || key === 'manualLoad') sources.historyChanged()
     else if (key === 'profileActions' || key === 'commandAction') orca.panels.post('summary.changed', { reason: 'settings' })
   })
   // A status contribution keeps Orca's worker alive while it observes the active summary.

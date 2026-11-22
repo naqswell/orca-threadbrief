@@ -14,6 +14,7 @@
   <p id="status" role="status" aria-live="polite"></p>
   <p id="loading" class="muted" role="status">Loading summary…</p>
   <main aria-label="Summary" aria-busy="true" tabindex="0" hidden></main>
+  <button id="manual-load" type="button" hidden>Load brief</button>
   <div id="reader-tools">
     <span id="agent-working" role="status" hidden>Agent working</span>
     <button type="button" id="refresh-brief" aria-label="Refresh summary" hidden>Update available · Refresh</button>
@@ -21,12 +22,25 @@
   <dialog id="settings-dialog" aria-labelledby="settings-title" closedby="any">
     <div class="dialog-heading"><h2 id="settings-title">Settings</h2><button id="close-settings" type="button" aria-label="Close settings" title="Close settings" autofocus><svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="m4 4 8 8m0-8-8 8"/></svg></button></div>
     <fieldset class="preference-group" disabled>
-      <legend>Summary source</legend>
+      <legend>When to load briefs</legend>
+      <label class="option"><span>Load briefs only on click<small id="load-mode-hint">Off: the brief follows your selected session.</small></span><input name="manualLoad" type="checkbox"></label>
+    </fieldset>
+    <p id="settings-status" role="status"></p>
+    <details name="settings-section" id="reading-settings">
+      <summary>Sources and reading</summary>
+    <fieldset class="preference-group" disabled>
+      <legend class="visually-hidden">Sources and reading</legend>
       <label class="option"><span>Use the agent’s last reply<small>Show a finished session’s reply when it has no saved report.</small></span><input name="historyOutcome" type="checkbox"></label>
       <label class="option"><span>Read paired session history<small>Read the selected conversation from its own Orca server. Turn off for saved remote reports only.</small></span><input name="pairedHistory" type="checkbox"></label>
+      <label class="option"><span>Show the plugin icon</span><input name="showPanelIcon" type="checkbox"></label>
+      <label class="option"><span>Pause updates while reading<small>Choose Refresh when you’re ready. Turn off to always show the latest brief.</small></span><input name="pauseWhileReading" type="checkbox"></label>
+      <label class="option"><span>Open for new worktrees<small>Only when the new worktree has a saved summary.</small></span><input name="autoOpen" type="checkbox"></label>
     </fieldset>
+    </details>
+    <details name="settings-section" id="recap-settings">
+      <summary>Recap strategy and model <small id="recap-mode-label"></small></summary>
     <fieldset class="preference-group" disabled>
-      <legend>Recap strategy</legend>
+      <legend class="visually-hidden">Recap strategy</legend>
       <label>Mode <select name="summaryStrategy"><option value="brief">Brief recap</option><option value="handoff">Detailed handoff</option><option value="instant">Instant · no model call</option></select></label>
     </fieldset>
     <p id="strategy-hint"></p>
@@ -48,7 +62,8 @@
       </div>
       <p id="recap-status" role="status"></p>
     </div>
-    <details id="summary-guide">
+    </details>
+    <details name="settings-section" id="summary-guide">
       <summary>How to get your first summary</summary>
       <p>Select an agent tab and give it a task. When it finishes, open this panel to read its reply. For a paired server, leave “Read paired session history” on. No profile or API key needed.</p>
       <p>Want a shorter reply? Send this to your agent:</p>
@@ -57,7 +72,7 @@
       <p id="copy-status" role="status"></p>
       <p>A saved session summary takes priority. If neither source is available, the panel looks for a report shared with this worktree.</p>
     </details>
-    <details id="exclusions">
+    <details name="settings-section" id="exclusions">
       <summary>Excluded summaries</summary>
       <p>Skip the history and saved reports for a session, workspace or entire project. Nothing is deleted.</p>
       <div id="exclusion-choices"></div>
@@ -65,16 +80,9 @@
       <div id="exclusion-list"></div>
       <p id="exclusion-status" role="status"></p>
     </details>
-    <fieldset class="preference-group" disabled>
-      <legend>Panel</legend>
-      <label class="option"><span>Show the plugin icon</span><input name="showPanelIcon" type="checkbox"></label>
-      <label class="option"><span>Pause updates while reading<small>Choose Refresh when you’re ready. Turn off to always show the latest brief.</small></span><input name="pauseWhileReading" type="checkbox"></label>
-      <label class="option"><span>Open for new worktrees<small>Only when the new worktree has a saved summary.</small></span><input name="autoOpen" type="checkbox"></label>
-    </fieldset>
-    <p id="settings-status" role="status"></p>
-    <details id="workflow-profiles">
-    <summary>Workflow profiles <small>Optional</small></summary>
-    <p>Add shortcuts to a project's work. Profiles are optional; summaries work without them. Agents can also import profiles using the documented <code>workflow-profile.mjs</code> CLI.</p>
+    <details name="settings-section" id="workflow-profiles">
+    <summary>Workflow profiles</summary>
+    <p>Add command shortcuts for specific projects. Summaries work without a profile.</p>
     <fieldset class="preference-group" disabled>
       <legend class="visually-hidden">Profile commands</legend>
       <label class="option"><span>Show profile commands</span><input name="profileActions" type="checkbox"></label>

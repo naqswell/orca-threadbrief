@@ -104,9 +104,10 @@ export function bindSources(orca, { settings, reveal, roots = [directory, legacy
     try {
       const current = selection
       if (!current) return
-      const [selected, files] = await Promise.all([getFocus(), fingerprint(current.files)])
+      const [selected, files] = await Promise.all([getFocus(), current.manual ? undefined : fingerprint(current.files)])
       if (selection !== current) return
       if (focusKey(selected) !== current.key) invalidate('selection')
+      else if (current.manual) return
       else if (files !== current.fingerprint) invalidate('file')
       else if (current.monitor && Date.now() >= current.nextCheck) {
         current.nextCheck = Date.now() + 4000
@@ -119,15 +120,24 @@ export function bindSources(orca, { settings, reveal, roots = [directory, legacy
     listeners.add(panel?.id ?? 'summary')
     if (!timer) { timer = setInterval(() => { void tick() }, interval); timer.unref?.() }
   }
-  async function readFocused({ listen: subscribe } = {}, { panel } = {}, includePublication = false) {
+  async function readFocused({ listen: subscribe, loadFor } = {}, { panel } = {}, includePublication = false) {
     if (subscribe) listen(panel)
     const start = generation
-    const active = await context()
+    const [active, prefs] = await Promise.all([context(), settings()])
+    const manual = prefs.manualLoad === true
+    if (manual && includePublication && !loadFor) return { scope: 'manual' }
     const workspaceId = active?.workspaceId
     observedWorkspace = workspaceId
-    if (!workspaceId) return { scope: 'none', summary: null }
+    if (!workspaceId) return { scope: 'none', summary: null, manual }
     const selected = await getFocus(), key = focusKey(selected)
-    const current = { start, key, files: new Set(), workspaceId, selected, source: null, agent: null }
+    const current = { start, key, files: new Set(), workspaceId, selected, source: null, agent: null, manual }
+    const loadKey = manual && selected ? JSON.stringify([workspaceId, key]) : undefined
+    if (manual && (!loadKey || loadFor !== loadKey)) {
+      checkGeneration(start)
+      if (loadFor) throw Error('The active selection changed. Load the brief again.')
+      if (!includePublication && (!selection?.manual || selection.key !== key || selection.workspaceId !== workspaceId)) selection = current
+      return { scope: 'manual', manual, contextKey: loadKey }
+    }
     const { session, excluded } = await exclusions.check({ active, selected }, () => resolve(active, selected))
     current.agent = session
     const contextKey = JSON.stringify([workspaceId, session?.environment ?? selected?.host, session?.id ?? key])
@@ -147,7 +157,7 @@ export function bindSources(orca, { settings, reveal, roots = [directory, legacy
           Object.assign(current, { monitor: true, nextCheck: Date.now() + 4000, liveState: live?.state, updatedAt: live?.updatedAt })
         }
       } else {
-        const prefs = await settings()
+        checkGeneration(start)
         const paired = session.environment !== 'local'
         if (prefs.historyOutcome === false) view.emptyReason = 'historyOff'
         else if (paired && prefs.pairedHistory === false) view.emptyReason = 'pairedOff'
@@ -193,13 +203,13 @@ export function bindSources(orca, { settings, reveal, roots = [directory, legacy
       completed.set(contextKey, view.outcome)
       if (completed.size > 12) completed.delete(completed.keys().next().value)
     }
-    if (!includePublication) { view.contextKey = contextKey; view.working = working }
+    if (!includePublication) { view.contextKey = manual ? loadKey : contextKey; view.working = working; view.manual = manual }
     if (view.scope !== 'none') view.workspaceId = workspaceId
-    selection = current
+    if (!includePublication) selection = current
     return view
   }
   const focused = (input, ctx) => readFocused(input, ctx)
-  const workflowFocused = () => readFocused({}, {}, true)
+  const workflowFocused = input => readFocused(input, {}, true)
   async function frame({ id, hash } = {}) {
     const current = selection
     if (!current?.source || (id != null && id !== current.workspaceId) || typeof hash !== 'string' || !/^[0-9a-f]{64}$/u.test(hash)) throw Error('Image is unavailable.')
@@ -223,7 +233,8 @@ export function bindSources(orca, { settings, reveal, roots = [directory, legacy
       if (item.expires <= now) { created.delete(raw); continue }
       if (id !== raw && id !== item.workspaceListId) continue
       created.delete(raw)
-      if ((await settings()).autoOpen !== true) return
+      const prefs = await settings()
+      if (prefs.manualLoad || prefs.autoOpen !== true) return
       try {
         const start = generation
         const view = await focused()
@@ -244,6 +255,7 @@ export function bindSources(orca, { settings, reveal, roots = [directory, legacy
   })
   orca.events.on('agent.status.changed', event => {
     const current = selection ?? observedPane
+    if (current?.manual) return
     if (!current || (event.workspaceId && event.workspaceId !== current.workspaceId && event.workspaceId !== current.selected?.workspace && event.workspaceListId !== current.workspaceId)) return
     const pane = current.agent?.paneKey ?? (current.selected?.tab && current.selected?.leaf ? `${current.selected.tab.replace(/^web-terminal-/u, '')}:${current.selected.leaf}` : null)
     if (pane && pane === event.paneKey) invalidate('session')

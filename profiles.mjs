@@ -105,17 +105,21 @@ export function bindProfiles(orca, { settings, focused }) {
     })
   }
   orca.panels.handle('profiles.save', save)
-  orca.panels.handle('profiles.delete', async ({id} = {}) => update((profiles, trust) => {
-    delete trust[id]
-    const index = profiles.findIndex(p => p.id === id)
-    if (index >= 0) profiles.splice(index, 1)
-    return {}
-  }))
+  const remove = async id => {
+    if (typeof id !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/u.test(id)) throw Error('Invalid profile ID.')
+    return update((profiles, trust) => {
+      delete trust[id]
+      const index = profiles.findIndex(p => p.id === id)
+      if (index >= 0) profiles.splice(index, 1)
+      return {}
+    })
+  }
+  orca.panels.handle('profiles.delete', async ({id} = {}) => remove(id))
 
-  async function view(draft) {
+  async function view(draft, loadFor) {
     const context = await host.call('workspace.readContext')
-    const selection = await focused()
-    if (selection?.scope === 'excluded') return {state:'none'}
+    const selection = await focused({ loadFor })
+    if (selection?.scope === 'excluded' || selection?.scope === 'manual') return {state:'none'}
     const summary = selection?.summary
     const bareReview = knownReview(summary)
     const none = bareReview ? {state:'review', review:{...bareReview, custom:false}} : {state:'none'}
@@ -160,7 +164,7 @@ export function bindProfiles(orca, { settings, focused }) {
       return {label:step.label, command}
     })
     const custom = Boolean(review && reviewLink(review.url, profile.reviewHost) && await trustedOpener(profile))
-    const latest = await focused()
+    const latest = await focused({ loadFor })
     const active = await host.call('workspace.readContext')
     if (JSON.stringify(latest) !== JSON.stringify(selection) || active?.workspaceId !== context.workspaceId || active.branch !== context.branch) throw Error('The active workspace changed. Refresh the panel.')
     const key = digest([context.workspaceId, context.branch, selection, ws, profile, selectedDraft, review, custom])
@@ -170,16 +174,17 @@ export function bindProfiles(orca, { settings, focused }) {
     if (!actions.length && !hasReviewStep) return {state:'none'}
     return {state:'actions', ...common, actions, ...(hasReviewStep ? {draft:selectedDraft} : {})}
   }
-  orca.panels.handle('workflow.view', async ({draft, key} = {}) => {
+  orca.panels.handle('workflow.view', async ({draft, key, loadFor} = {}) => {
     if (draft !== undefined) await fresh(key, 'actions')
-    const result = await view(draft)
+    const result = await view(draft, loadFor)
     if (draft !== undefined) await fresh(key, 'actions')
-    if (result.key) { issued.clear(); issued.set(result.key, draft) }
+    if (result.key) { issued.clear(); issued.set(result.key, { draft, loadFor }) }
     return result
   })
   async function fresh(key, state) {
     if (typeof key !== 'string' || !issued.has(key)) throw Error('The workflow changed. Refresh the panel.')
-    const result = await view(issued.get(key))
+    const { draft, loadFor } = issued.get(key)
+    const result = await view(draft, loadFor)
     if (result.key !== key || result.state !== state) throw Error('The workflow changed. Refresh the panel.')
     return result
   }
@@ -207,11 +212,12 @@ export function bindProfiles(orca, { settings, focused }) {
     await run(argv[0], argv.slice(1), {timeout:15000, maxBuffer:16384, windowsHide:true})
     return {message:'Review opener started.'}
   })
-  return async (profile, enable) => {
+  const accept = async (profile, enable) => {
     await save({profile: {...profile, enabled: enable}})
     if (enable) {
       try { await host.call('settings.set', { key: 'profileActions', value: true }) }
       catch { return { commandsOff: true } }
     }
   }
+  return {accept, list: async () => ({profiles:await getProfiles()}), remove}
 }

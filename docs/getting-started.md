@@ -12,6 +12,12 @@ Opening the panel displays a reply the agent already wrote, in its original lang
 
 No formatting prompt is required. Plain text keeps its line breaks. Markdown replies display headings, lists, tables, emphasis and code; command examples are selectable text, not actions. Web links open through Orca when you click them. File links keep their label and show the path on hover. HTML is displayed as text and remote images are not loaded.
 
+### Load a brief only when you need it
+
+Turn on **Load briefs only on click** at the top of the gear menu, or in Orca’s settings for Threadbrief. Opening the panel or switching sessions only identifies the selection; it does not read saved reports or conversation history. Click **Load brief** for the selected session. Later replies do not replace it until you click **Refresh brief**. Selecting a different session clears the previous brief. New worktrees do not auto-open the panel in this mode. An agent can [apply the same preference using JSON](configuration.md).
+
+These buttons display existing material, including on a paired server. To ask a model for a new recap, use the preview and start buttons below. Turn off **Load briefs only on click** to resume automatic updates.
+
 ## Choose a strategy and an agent
 
 | Settings → Recap strategy | What it does | Extra model usage |
@@ -20,7 +26,7 @@ No formatting prompt is required. Plain text keeps its line breaks. Markdown rep
 | **Instant** | Reads existing text. Use it to pick up where you left off. | None |
 | **Detailed handoff** | Sends up to 12,000 characters from the last 48 entries. Asks for decisions, evidence, loose ends and next steps in up to 400 words. | One new session with a larger input and requested output |
 
-Open the gear to choose an agent installed in the selected workspace, even while a turn is running. Once the conversation finishes, choose **Preview recap request**. Read the destination and the exact prompt, including the excerpt. Tool calls and tool output are left out; ordinary messages may still contain private information. **Start recap in new session** opens a separate agent terminal in that workspace. Select the new terminal to read the answer there or in Threadbrief. The source conversation and its saved report are not changed.
+Open **Settings → Recap strategy and model** to choose an agent installed in the selected workspace, even while a turn is running. Once the conversation finishes, choose **Preview recap request**. Read the destination and the exact prompt, including the excerpt. Tool calls and tool output are left out; ordinary messages may still contain private information. **Start recap in new session** opens a separate agent terminal in that workspace. Select the new terminal to read the answer there or in Threadbrief. The source conversation and its saved report are not changed.
 
 **Choose a model:** keep **Model → Use agent’s default** to use your usual setup. To pin another model, choose **Add a model…**, copy its exact identifier from the agent’s model picker on the source host, and select **Use this model**. Future previews show the agent, model and host. Models you add stay in that agent’s dropdown; switching agents in the panel starts with the new agent’s default. To unpin, choose **Use agent’s default**. In Orca’s plugin settings the same selection is **Preferred recap agent** and **Custom recap model (optional)**. Saved choices are not a live catalog of your account’s models. Threadbrief does not retry a rejected launch with a different model.
 

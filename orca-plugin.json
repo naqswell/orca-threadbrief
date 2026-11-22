@@ -2,7 +2,7 @@
   "manifestVersion": 2,
   "id": "session-summary",
   "name": "Threadbrief",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "icon": "assets/session-summary.png",
   "cover": { "path": "assets/threadbrief-cover.png", "alt": "Threadbrief: a mint thread leads to a stack of notes labeled Goal, Done and Next." },
   "description": "Pick up where your agent left off. Read its last reply or a saved handoff with the goal, result and next step.",
@@ -22,6 +22,7 @@
     "statusBarItems": [{ "id": "summary-observer" }],
     "settings": [
       { "key": "showPanelIcon", "title": "Show the plugin icon", "description": "Show the plugin mark on the settings gear. The sidebar tab is unchanged.", "type": "boolean", "default": true },
+      { "key": "manualLoad", "title": "Load briefs only on click", "description": "Use Load brief or Refresh brief in the panel. Switching sessions and finishing a turn never read reports or history automatically. New worktrees do not open the panel.", "type": "boolean", "default": false },
       { "key": "historyOutcome", "title": "Use the agent’s last reply", "description": "Show a completed session’s reply when no saved report is available.", "type": "boolean", "default": true },
       { "key": "pairedHistory", "title": "Read paired session history", "description": "Allow Threadbrief to read the selected session from its paired Orca server. Recap requests stay on that server.", "type": "boolean", "default": true },
       { "key": "summaryStrategy", "title": "Recap strategy", "description": "Brief prepares a short recap; Detailed asks for a longer handoff. Neither starts an agent until you approve the preview. Instant only shows existing text.", "type": "string", "default": "brief", "enum": ["brief", "handoff", "instant"], "enumLabels": ["Brief recap", "Detailed handoff", "Instant · no model call"] },

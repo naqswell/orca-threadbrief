@@ -102,6 +102,11 @@ async function showFrame(parent, label, title, id, hash) {
   } catch { if (box.isConnected) box.textContent = 'Image unavailable.' }
 }
 function drawSummary(view, workflow) {
+  if (view.scope === 'manual') {
+    node('h2', 'On-demand brief', main)
+    node('p', 'Load the selected session’s brief when you need it. No model call.', main)
+    return
+  }
   if (view.scope === 'excluded') {
     node('h2', 'Summaries are off', main)
     node('p', view.excluded === 'unverified' ? 'Orca could not confirm whether this selection is excluded. Its reports and history were not read.' : `This ${view.excluded} is excluded. Its reports and history were not read.`, main)
@@ -119,7 +124,7 @@ function drawSummary(view, workflow) {
   const summary = view.summary
   if (!summary) {
     const hints = {
-      waiting: 'No completed reply yet. The first one will appear here when this turn finishes.',
+      waiting: view.manual ? 'No completed reply yet. Refresh after this turn finishes.' : 'No completed reply yet. The first one will appear here when this turn finishes.',
       historyOff: 'No saved session report. Turn on “Use the agent’s last reply” to read its history.',
       pairedOff: 'Paired history is off. Enable it in Settings or save a session report.',
       unavailable: 'Could not verify this session on its paired server. Check the connection or use a saved report.',
@@ -230,7 +235,7 @@ function drawWorkflow(workflow, draftKey) {
     title.addEventListener('input', () => { draft.title = title.value; changed() })
     base.addEventListener('input', () => { draft.base = base.value; changed() })
     description.addEventListener('input', () => { draft.description = description.value; changed() })
-    button(details, 'Update commands', () => { dirtyDrafts.delete(draftKey); rendered = undefined; void refresh() })
+    button(details, 'Update commands', () => { dirtyDrafts.delete(draftKey); rendered = undefined; void refresh(false, true, manualKey) })
     button(details, 'Clear description', () => { description.value = ''; draft.description = ''; changed(); description.focus() })
   }
 }
@@ -248,6 +253,9 @@ function showLoading(leaving = false) {
   if (leaving) main.inert = true
 }
 const activity = document.querySelector('#agent-working'), refreshBrief = document.querySelector('#refresh-brief')
+const manualLoad = document.querySelector('#manual-load')
+let manualKey
+manualLoad.addEventListener('click', () => { if (manualKey) void refresh(false, true, manualKey) })
 let displayedContext, hasBrief = false, pointerReading = false
 let pauseWhileReading = true
 main.addEventListener('wheel', () => { pointerReading = true }, { passive: true })
@@ -256,6 +264,8 @@ main.addEventListener('pointerleave', () => { pointerReading = false })
 const reading = () => document.hasFocus() || pointerReading || !window.getSelection()?.isCollapsed
 const holdUpdate = () => pauseWhileReading && hasBrief && (reading() || !refreshBrief.hidden)
 function resetReader() {
+  manualKey = undefined
+  manualLoad.hidden = true
   displayedContext = undefined
   hasBrief = pointerReading = false
   activity.hidden = refreshBrief.hidden = true
@@ -268,26 +278,32 @@ refreshBrief.addEventListener('click', async () => {
     window.scrollTo(0, before)
   }
 })
-async function refresh(leaving = false, apply = true) {
+async function refresh(leaving = false, apply = true, loadFor) {
   if (document.hidden) return
   const ticket = ++generation
   showLoading(leaving)
+  if (loadFor) manualLoad.disabled = true
   listening = true
+  const input = loadFor ? { loadFor } : {}
   try {
     const [result, workflowResult] = await Promise.all([
-      request('summary.focused', { listen: true }),
-      request('workflow.view').then(value => ({ value }), error => ({ error }))
+      request('summary.focused', { listen: true, ...input }),
+      request('workflow.view', input).then(value => ({ value }), error => ({ error }))
     ])
     const original = workflowResult.value
     let workflow = original
     if (original?.key && drafts.has(original.key) && original.draft && !dirtyDrafts.has(original.key)) {
-      try { workflow = await request('workflow.view', { draft: drafts.get(original.key), key: original.key }) }
+      try { workflow = await request('workflow.view', { ...input, draft: drafts.get(original.key), key: original.key }) }
       catch (error) { workflowResult.error = error; workflow = null }
     }
     if (ticket !== generation || document.hidden) return
     const { working, contextKey, ...view } = result
-    activity.hidden = !working
-    sourceHint = working ? 'Choose an agent now. Preview is available when this turn finishes.' :
+    manualKey = view.manual ? contextKey : undefined
+    manualLoad.hidden = !manualKey
+    if (view.scope === 'manual' && manualKey === displayedContext && rendered !== undefined) return
+    manualLoad.textContent = view.scope === 'manual' ? 'Load brief' : 'Refresh brief'
+    activity.hidden = !working || view.manual
+    sourceHint = working && !view.manual ? 'Choose an agent now. Preview is available when this turn finishes.' :
       view.scope === 'excluded' ? 'Summaries are off for this selection.' :
       view.emptyReason === 'pairedOff' ? 'Turn on paired session history to preview a recap.' :
       view.scope === 'none' ? 'Select a finished agent conversation to preview a recap.' : ''
@@ -318,6 +334,7 @@ async function refresh(leaving = false, apply = true) {
     node('p', message(error, 'Could not load summary.'), main)
   } finally {
     if (ticket === generation && !document.hidden) {
+      manualLoad.disabled = false
       loading.hidden = true
       main.inert = false
       main.setAttribute('aria-busy', 'false')
@@ -346,8 +363,8 @@ function pause() {
 api.plugin.on('summary.changed', ({ reason } = {}) => {
   const privateChange = reason === 'exclusions' || reason === 'history-setting'
   const leaving = reason === 'workspace' || reason === 'selection' || privateChange
+  if (privateChange || (leaving && manualKey)) { main.replaceChildren(); main.hidden = true; rendered = undefined }
   if (leaving) resetReader()
-  if (privateChange) { main.replaceChildren(); main.hidden = true; rendered = undefined }
   if (leaving || reason === 'session' || reason === 'settings') clearRecap()
   void refresh(leaving, false)
   if (dialog.open && leaving) void loadPreferences()
@@ -438,12 +455,15 @@ async function loadPreferences() {
       }
       group.disabled = false
     }
+    for (const key of ['autoOpen', 'pauseWhileReading']) dialog.querySelector(`[name="${key}"]`).disabled = values.manualLoad === true
+    document.querySelector('#load-mode-hint').textContent = values.manualLoad ? 'On: use Load brief or Refresh brief in the panel.' : 'Off: the brief follows your selected session.'
     await showStrategy(values, revision)
     document.querySelector('#command-order').hidden = values.profileActions !== true
   } catch (error) {
     if (revision === settingsRevision) settingsStatus.textContent = message(error, 'Could not read settings.')
   }
 }
+const recapSettings = document.querySelector('#recap-settings')
 const recapAgent = document.querySelector('#recap-agent'), recapStatus = document.querySelector('#recap-status')
 const previewRecap = document.querySelector('#preview-recap'), startRecap = document.querySelector('#start-recap')
 let recapRevision = 0, recapToken, previousMode
@@ -471,10 +491,11 @@ async function showStrategy(values, revision) {
   const mode = values.summaryStrategy ?? 'brief'
   if (mode !== previousMode) { clearRecap(); previousMode = mode }
   const instant = mode === 'instant'
+  document.querySelector('#recap-mode-label').textContent = instant ? 'Instant' : mode === 'brief' ? 'Brief' : 'Detailed'
   document.querySelector('#strategy-hint').textContent = instant ? 'Shows existing text. No extra tokens or agent session.' :
     `${mode === 'brief' ? 'Up to 12 recent entries and 3,000 characters; asks for a 90-word recap.' : 'Up to 48 recent entries and 12,000 characters; asks for a 400-word handoff.'} Your agent’s usual usage limits and pricing apply.`
   document.querySelector('#recap-controls').hidden = instant
-  if (instant || !dialog.open) return
+  if (instant || !dialog.open || !recapSettings.open) return
   const storedModel = (values.recapModel ?? '').trim()
   historyEnabled = values.historyOutcome !== false
   recapAgent.disabled = true
@@ -638,6 +659,10 @@ function openSettings(showGuide = false) {
   if (workflows.open) void listProfiles()
 }
 document.querySelector('#open-settings').addEventListener('click', () => openSettings())
+recapSettings.addEventListener('toggle', () => {
+  if (recapSettings.open && dialog.open) void loadPreferences()
+  else clearRecap()
+})
 workflows.addEventListener('toggle', () => { if (workflows.open && dialog.open) void listProfiles() })
 document.querySelector('#copy-prompt').addEventListener('click', event => run(event.currentTarget,
   () => copyText(document.querySelector('#recap-prompt').textContent), 'Copied. Paste it into your agent conversation.', 'Could not copy the prompt.', document.querySelector('#copy-status')))

@@ -33,6 +33,10 @@ A folder installation uses `local.session-summary` instead. **If you already use
 
 Click the gear beside the task title. **Brief recap** (default) asks for up to 90 words; **Detailed handoff** asks for up to 400. Choose an installed agent and keep **Use agent’s default**, or pin a model under **Model → Add a model…**. Check the agent, model, host and excerpt before starting. **Instant** only shows existing text. [Compare strategies and costs](docs/getting-started.md#choose-a-strategy-and-an-agent).
 
+Prefer to load a brief yourself? Turn on **Load briefs only on click**. Select a session and click **Load brief**. The result stays unchanged until you click **Refresh brief**. Neither button calls a model.
+
+**Configuring Threadbrief from an agent or terminal?** [Set preferences, choose a model, manage exclusions and profiles with JSON](docs/configuration.md). No developer mode or GUI automation required.
+
 **Excluded summaries** skips history and saved reports for a session, workspace or project. Remove any rule there to resume. For saved reports only, turn off **Use the agent’s last reply**.
 
 Use **Orca Settings → Plugins → Threadbrief** or the panel gear for the same preferences: local/paired history, recap strategy, preferred agent, icon, auto-open, workflow commands and their order. In native Settings the preferred agent is its installed ID (empty uses the host default); the panel offers a live picker. Context-specific operations—excluding the selected item, editing profiles and previewing an actual recap—belong to the panel, not the native preference form.
