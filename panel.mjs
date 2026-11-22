@@ -92,7 +92,7 @@ async function showFrame(parent, label, title, id, hash) {
 }
 function drawSummary(view, workflow) {
   const header = node('header', undefined, main)
-  node('h1', view.title || 'Session Summary', header)
+  if (view.title) node('h1', view.title, header)
   if (view.outcome) {
     const section = node('section', undefined, main)
     node('h2', 'From session history', section)
@@ -101,7 +101,7 @@ function drawSummary(view, workflow) {
   }
   const summary = view.summary
   if (!summary) { node('p', 'No summary is available.', main); return }
-  node('p', view.scope === 'worktree' ? 'Worktree summary' : 'Session summary', header, 'muted')
+  node('p', view.scope === 'worktree' ? 'Shared with this worktree' : 'Saved for this session', header, 'muted')
   fields(header, [['Goal', summary.goal], ['Done', summary.done], ['Next', summary.next]])
   const result = summary.result
   if (result) {

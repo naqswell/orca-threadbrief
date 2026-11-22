@@ -22,9 +22,9 @@ A folder installation uses `local.session-summary` instead. **If you already use
 
 ## Settings
 
-Click **Settings** in the panel header. Its preferences are the same ones shown under **Settings → Plugins → Session Summary** in Orca. You can turn off the history fallback, open the panel automatically for new worktrees that have a summary, enable workflow profile actions, or change the preferred command action. History is enabled by default. Auto-open and profile actions are off.
+Click the gear beside the session title to open **Settings**. Its preferences are the same ones shown under **Settings → Plugins → Session Summary** in Orca. You can turn off the history fallback, open the panel automatically for new worktrees that have a summary, enable workflow profile actions, or change the preferred command action. History is enabled by default. Auto-open and profile actions are off.
 
-Turn off **Show icon in panel header** to hide the colored mark next to the title. The sidebar tab stays available. Use Orca’s own Source Control for normal GitHub or GitLab work. A known review URL can be opened from the summary.
+Turn off **Show plugin icon on Settings button** to keep just the gear. The sidebar tab stays available. Use Orca’s own Source Control for normal GitHub or GitLab work. A known review URL can be opened from the summary.
 
 ## Private workflows
 
