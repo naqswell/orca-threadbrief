@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 800 500" role="img" aria-labelledby="title desc">
+  <title id="title">Threadbrief</title>
+  <desc id="desc">A mint thread leads to three notes labeled Goal, Done and Next.</desc>
+  <defs>
+    <linearGradient id="ink" x2="1" y2="1"><stop stop-color="#16172e"/><stop offset="1" stop-color="#30284e"/></linearGradient>
+    <linearGradient id="paper" x2="1" y2="1"><stop stop-color="#f4f0ff"/><stop offset="1" stop-color="#d8d0fb"/></linearGradient>
+    <pattern id="dots" width="16" height="16" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" fill="#a39cdd" opacity=".28"/></pattern>
+  </defs>
+  <rect width="800" height="500" fill="url(#ink)"/>
+  <path d="M460 0h340v500H358z" fill="url(#dots)"/>
+  <path d="M-24 363H88c41 0 39 42 78 42h221c79 0 49-127 129-127h66" fill="none" stroke="#89e8d4" stroke-width="3"/>
+  <circle cx="88" cy="363" r="5" fill="#aeefde"/>
+  <g font-family="Helvetica Neue, Helvetica, Arial, sans-serif">
+    <g transform="translate(46 153)" stroke-linecap="round" stroke-linejoin="round">
+      <path d="m0 30 24 13 24-13" fill="none" stroke="#88e7d1" stroke-width="4"/>
+      <path d="m0 20 24 13 24-13" fill="none" stroke="#aca5ed" stroke-width="4"/>
+      <path d="m0 12 24-13 24 13-24 13z" fill="#ded8ff"/>
+      <path d="m18 11 5 4 9-8" fill="none" stroke="#40365e" stroke-width="3"/>
+    </g>
+    <text x="109" y="181" fill="#bfb9df" font-size="16" font-weight="600" letter-spacing="2.5">SESSION NOTES</text>
+    <text x="41" y="265" fill="#f7f5ff" font-size="68" font-weight="700" letter-spacing="-3.5">Threadbrief</text>
+    <text x="46" y="309" fill="#c7c2dc" font-size="25">Where you left off.</text>
+    <g transform="rotate(5 597 248)">
+      <rect x="467" y="117" width="242" height="272" rx="16" fill="#7566ad" stroke="#9a8bc6" stroke-width="2"/>
+    </g>
+    <g transform="rotate(-8 615 231)">
+      <rect x="493" y="92" width="242" height="272" rx="16" fill="url(#paper)"/>
+      <path d="M516 173h195m-195 73h195" stroke="#b0a6d1"/>
+      <g fill="none" stroke="#514467" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="529" cy="138" r="8"/><circle cx="529" cy="138" r="2" fill="#514467"/>
+        <path d="m521 211 6 6 12-13m-17 82h16m-7-7 7 7-7 7"/>
+      </g>
+      <g fill="#342c4a" font-size="28" font-weight="650"><text x="550" y="147">Goal</text><text x="550" y="220">Done</text><text x="550" y="295">Next</text></g>
+      <rect x="516" y="324" width="42" height="6" rx="3" fill="#574686"/><rect x="563" y="324" width="20" height="6" rx="3" fill="#ada0d0"/>
+    </g>
+  </g>
+</svg>

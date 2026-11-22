@@ -2,7 +2,9 @@ const api = window.orca
 const main = document.querySelector('main')
 const status = document.querySelector('#status')
 const dialog = document.querySelector('#settings-dialog')
-const preferences = document.querySelector('#preferences')
+const preferenceGroups = dialog.querySelectorAll('.preference-group')
+const guide = dialog.querySelector('#summary-guide')
+const workflows = dialog.querySelector('#workflow-profiles')
 const settingsStatus = document.querySelector('#settings-status')
 const form = document.querySelector('#profile-form')
 const profileStatus = document.querySelector('#profile-status')
@@ -44,13 +46,14 @@ async function copyText(text) {
   const previous = document.activeElement
   const input = document.createElement('textarea')
   input.value = text
-  input.setAttribute('aria-label', 'Command to copy')
+  input.setAttribute('aria-label', 'Text to copy')
   input.style.position = 'fixed'
   input.style.left = '-9999px'
-  document.body.append(input)
+  const container = dialog.open ? dialog : document.body
+  container.append(input)
   input.select()
   try {
-    if (!document.execCommand('copy')) throw Error('Select and copy the command instead.')
+    if (!document.execCommand('copy')) throw Error('Select the text and copy it instead.')
   } finally {
     input.remove()
     previous?.focus()
@@ -100,7 +103,17 @@ function drawSummary(view, workflow) {
     return
   }
   const summary = view.summary
-  if (!summary) { node('p', 'No summary is available.', main); return }
+  if (!summary) {
+    const hints = {
+      waiting: 'The agent is still working. Its reply will appear here when this local session finishes.',
+      historyOff: 'There is no saved summary for this session. Turn on “Use the agent’s last reply” to include local history.',
+      paired: 'This session is on a paired environment. Save a session summary to see it here; history is local only.',
+      noReply: 'No reply is available from this session’s history yet. Ask the agent for a short recap.'
+    }
+    node('p', hints[view.emptyReason] || 'Select a local agent tab in Orca to see its summary.', main, 'empty-hint')
+    button(main, 'How summaries work', () => openSettings(true)).className = 'guide-link'
+    return
+  }
   node('p', view.scope === 'worktree' ? 'Shared with this worktree' : 'Saved for this session', header, 'muted')
   fields(header, [['Goal', summary.goal], ['Done', summary.done], ['Next', summary.next]])
   const result = summary.result
@@ -206,9 +219,23 @@ function drawWorkflow(workflow, draftKey) {
     button(details, 'Clear description', () => { description.value = ''; draft.description = ''; changed(); description.focus() })
   }
 }
+const loading = document.querySelector('#loading')
+let draftFocus
+function showLoading() {
+  if (main.hidden) return
+  const field = document.activeElement
+  const editor = field?.closest('details[data-draft-key]')
+  draftFocus = field?.dataset.draftField && editor
+    ? { key: editor.dataset.draftKey, name: field.dataset.draftField, start: field.selectionStart, end: field.selectionEnd } : null
+  main.hidden = true
+  main.setAttribute('aria-busy', 'true')
+  status.textContent = ''
+  loading.hidden = false
+}
 async function refresh() {
   if (document.hidden) return
   const ticket = ++generation
+  showLoading()
   listening = true
   try {
     const [view, workflowResult] = await Promise.all([
@@ -226,9 +253,6 @@ async function refresh() {
     if (key === rendered) return
     rendered = key
     const editor = main.querySelector('details[data-draft-key]')
-    const active = document.activeElement
-    const selection = active?.dataset?.draftField && editor?.contains(active)
-      ? { key: editor.dataset.draftKey, field: active.dataset.draftField, start: active.selectionStart, end: active.selectionEnd } : null
     const openKey = editor?.open ? editor.dataset.draftKey : null
     main.replaceChildren()
     drawSummary(view, workflow)
@@ -236,21 +260,32 @@ async function refresh() {
     if (workflowResult.error) node('p', message(workflowResult.error, 'Could not load workflow actions.'), main)
     const nextEditor = main.querySelector('details[data-draft-key]')
     if (nextEditor?.dataset.draftKey === openKey) nextEditor.open = true
-    if (selection && nextEditor?.dataset.draftKey === selection.key) {
-      const field = nextEditor.querySelector(`[data-draft-field="${selection.field}"]`)
-      nextEditor.open = true
-      field?.focus()
-      field?.setSelectionRange(selection.start, selection.end)
-    }
   } catch (error) {
     if (ticket !== generation || document.hidden) return
     rendered = undefined
     main.replaceChildren()
     node('p', message(error, 'Could not load summary.'), main)
+  } finally {
+    if (ticket === generation && !document.hidden) {
+      main.setAttribute('aria-busy', 'false')
+      main.hidden = false
+      loading.hidden = true
+      if (draftFocus && document.activeElement === document.body) {
+        const editor = main.querySelector('details[data-draft-key]')
+        if (editor?.dataset.draftKey === draftFocus.key) {
+          const field = editor.querySelector(`[data-draft-field="${draftFocus.name}"]`)
+          editor.open = true
+          field?.focus()
+          field?.setSelectionRange(draftFocus.start, draftFocus.end)
+        }
+      }
+      draftFocus = null
+    }
   }
 }
 function pause() {
   generation++
+  showLoading()
   if (listening) { listening = false; void request('summary.closed').catch(() => {}) }
 }
 api.plugin.on('summary.changed', () => void refresh())
@@ -317,7 +352,6 @@ async function listProfiles() {
         })
       }
     }
-    if (!result.profiles.length) node('p', 'No profiles saved.', list)
     for (const profile of result.profiles) {
       const entry = node('div', undefined, list, 'profile-entry')
       node('strong', profile.name, entry)
@@ -339,17 +373,21 @@ async function loadPreferences() {
     const values = await api.settings.get()
     if (revision !== settingsRevision) return
     document.querySelector('#panel-icon').hidden = values.showPanelIcon === false
-    for (const field of preferences.elements) {
-      if (field.type === 'checkbox') field.checked = values[field.name] === true
-      else field.value = values[field.name]
+    for (const group of preferenceGroups) {
+      for (const field of group.elements) {
+        if (field.type === 'checkbox') field.checked = values[field.name] === true
+        else field.value = values[field.name]
+      }
+      group.disabled = false
     }
-    preferences.disabled = false
+    document.querySelector('#command-order').hidden = values.profileActions !== true
   } catch (error) {
     if (revision === settingsRevision) settingsStatus.textContent = message(error, 'Could not read settings.')
   }
 }
-preferences.addEventListener('change', async ({ target }) => {
-  preferences.disabled = true
+dialog.addEventListener('change', async ({ target }) => {
+  if (!target.closest('.preference-group')) return
+  for (const group of preferenceGroups) group.disabled = true
   ++settingsRevision
   try {
     await api.settings.set(target.name, target.type === 'checkbox' ? target.checked : target.value)
@@ -361,13 +399,20 @@ preferences.addEventListener('change', async ({ target }) => {
   }
 })
 api.settings.onDidChange(({ key }) => { if (dialog.open || key === 'showPanelIcon') void loadPreferences() })
-document.querySelector('#open-settings').addEventListener('click', () => {
-  profileStatus.textContent = settingsStatus.textContent = ''
-  preferences.disabled = true
+function openSettings(showGuide = false) {
+  profileStatus.textContent = settingsStatus.textContent = document.querySelector('#copy-status').textContent = ''
+  for (const group of preferenceGroups) group.disabled = true
+  if (showGuide) guide.open = true
   dialog.showModal()
+  if (showGuide) guide.querySelector('summary').focus()
   void loadPreferences()
-  void listProfiles()
-})
+  if (workflows.open) void listProfiles()
+}
+document.querySelector('#open-settings').addEventListener('click', () => openSettings())
+workflows.addEventListener('toggle', () => { if (workflows.open && dialog.open) void listProfiles() })
+document.querySelector('#copy-prompt').addEventListener('click', event => run(event.currentTarget,
+  () => copyText(document.querySelector('#recap-prompt').textContent), 'Copied. Paste it into your agent conversation.', 'Could not copy the prompt.', document.querySelector('#copy-status')))
+document.querySelector('#choose-profile').addEventListener('click', () => document.querySelector('#import-profile').click())
 document.querySelector('#close-settings').addEventListener('click', () => dialog.close())
 document.querySelector('#new-profile').addEventListener('click', () => editProfile({}))
 document.querySelector('#cancel-profile').addEventListener('click', () => { form.hidden = true })

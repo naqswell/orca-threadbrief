@@ -1,11 +1,12 @@
 {
   "manifestVersion": 2,
   "id": "session-summary",
-  "name": "Session Summary",
+  "name": "Threadbrief",
   "version": "0.1.0",
   "icon": "assets/session-summary.png",
-  "description": "See the outcome of the active agent session or the shared summary of its worktree.",
-  "repository": "https://github.com/naqswell/orca-session-summary",
+  "cover": { "path": "assets/threadbrief-cover.png", "alt": "Threadbrief: a mint thread leads to a stack of notes labeled Goal, Done and Next." },
+  "description": "Pick up where your agent left off. Read its last reply or a saved handoff with the goal, result and next step.",
+  "repository": "https://github.com/naqswell/orca-threadbrief",
   "license": "MIT",
   "engines": { "orca": ">=1.4.268" },
   "execution": "trusted-worker",
@@ -16,15 +17,15 @@
     { "kind": "workspace:write" }, { "kind": "terminal:send" }
   ],
   "contributes": {
-    "panels": [{ "id": "summary", "title": "Session Summary", "icon": "layers", "entry": "panel.html", "ui": "html" }],
+    "panels": [{ "id": "summary", "title": "Threadbrief", "icon": "layers", "entry": "panel.html", "ui": "html" }],
     "events": [{ "on": "workspace.created" }, { "on": "workspace.changed" }, { "on": "agent.status.changed" }],
     "statusBarItems": [{ "id": "summary-observer" }],
     "settings": [
-      { "key": "showPanelIcon", "title": "Show plugin icon on Settings button", "description": "Hide the plugin mark to show just the settings gear. The sidebar tab is unchanged.", "type": "boolean", "default": true },
-      { "key": "historyOutcome", "title": "Show outcome from local history", "description": "If no saved session summary exists, show the last substantive reply from that completed session.", "type": "boolean", "default": true },
-      { "key": "autoOpen", "title": "Auto-open for new worktrees", "description": "Show the panel when a newly created worktree has a saved summary.", "type": "boolean", "default": false },
-      { "key": "profileActions", "title": "Enable workflow profile actions", "description": "Show actions only for a project matching one of your enabled profiles.", "type": "boolean", "default": false },
-      { "key": "commandAction", "title": "Preferred command action", "type": "string", "default": "copy", "enum": ["copy", "terminal"], "enumLabels": ["Copy command", "Open terminal"] }
+      { "key": "showPanelIcon", "title": "Show the plugin icon", "description": "Show the plugin mark on the settings gear. The sidebar tab is unchanged.", "type": "boolean", "default": true },
+      { "key": "historyOutcome", "title": "Use the agent’s last reply", "description": "When a local session finishes without a saved summary, show the reply from its history.", "type": "boolean", "default": true },
+      { "key": "autoOpen", "title": "Open for new worktrees", "description": "Open the panel only when the new worktree has a saved summary.", "type": "boolean", "default": false },
+      { "key": "profileActions", "title": "Show profile commands", "description": "Show optional workflow actions for projects that match an enabled profile. This does not affect summaries.", "type": "boolean", "default": false },
+      { "key": "commandAction", "title": "Profile commands: show first", "description": "Choose the first button shown for a profile command. Both buttons remain available. Neither runs the command.", "type": "string", "default": "copy", "enum": ["copy", "terminal"], "enumLabels": ["Copy command", "Open terminal"] }
     ]
   }
 }

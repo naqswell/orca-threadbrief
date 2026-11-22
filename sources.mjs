@@ -80,11 +80,15 @@ export function bindSources(orca, { settings, reveal, roots = [directory, legacy
     if (session) {
       const saved = await find(['sessions', session.environment], sessionFilename(session.id), current)
       if (saved) { current.source = saved; view.summary = saved.value }
-      else if ((await settings()).historyOutcome !== false && session.environment === 'local' && session.state === 'done') {
+      else if (session.environment !== 'local') view.emptyReason = 'paired'
+      else if ((await settings()).historyOutcome === false) view.emptyReason = 'historyOff'
+      else if (session.state === 'working') view.emptyReason = 'waiting'
+      else if (session.state === 'done') {
         const history = await command(['agent', 'read', `orca_session_id:${session.id}`, '--environment', 'local', '--limit', '20']).catch(() => null)
         const outcome = lastOutcome(history, session.id)
         if (outcome) view.outcome = outcome
-      }
+        else view.emptyReason = 'noReply'
+      } else view.emptyReason = 'noReply'
     }
     if (!view.summary && !view.outcome && !workspaceId.startsWith('folder:')) {
       let address = null
@@ -105,7 +109,11 @@ export function bindSources(orca, { settings, reveal, roots = [directory, legacy
     }
     current.fingerprint = await fingerprint(current.files)
     const [after, selectedAfter] = await Promise.all([context(), getFocus()])
-    if (after?.workspaceId !== workspaceId || focusKey(selectedAfter) !== key || generation !== start) throw Error('The active selection changed.')
+    if (generation !== start) throw Error('The active selection changed.')
+    if (after?.workspaceId !== workspaceId || focusKey(selectedAfter) !== key) {
+      invalidate('selection')
+      throw Error('The active selection changed.')
+    }
     if (view.scope !== 'none') view.workspaceId = workspaceId
     selection = current
     return view

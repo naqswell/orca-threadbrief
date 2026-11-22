@@ -1,6 +1,6 @@
-# Session Summary
+# Threadbrief
 
-Session Summary shows the outcome of work in Orca. The scope of a summary tells the reader whose work it describes.
+Threadbrief shows the outcome of work in Orca. The scope of a summary tells the reader whose work it describes.
 
 ## Language
 

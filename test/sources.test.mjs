@@ -36,6 +36,19 @@ async function save(root, parts, name, value) {
   await writeFile(join(path, name), JSON.stringify(value), { mode: 0o600 })
 }
 
+test('a fresh install shows the finished reply without any profiles or summary files', async t => {
+  const f = await fixture(t)
+  f.setHistory(undefined)
+  f.setState('working')
+  assert.equal((await f.sources.focused()).emptyReason, 'waiting')
+  f.setState('done')
+  assert.equal((await f.sources.focused()).outcome, 'A substantive outcome.')
+  f.setHistory(false)
+  const off = await f.sources.focused()
+  assert.equal(off.outcome, undefined)
+  assert.equal(off.emptyReason, 'historyOff')
+})
+
 test('migration, history and worktree follow the selected session', async t => {
   const f = await fixture(t)
   await save(f.roots[1], ['sessions', 'local'], sessionFilename('first'), record('Old session'))

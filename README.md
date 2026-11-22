@@ -1,15 +1,17 @@
-# Session Summary for Orca
+# Threadbrief for Orca
 
-Open **Session Summary** in Orca’s right sidebar to see what happened in the active session. You do not need a workflow profile, a Git hosting account or a script that writes summaries.
+Pick up where you left off. Select an agent tab in Orca and open **Threadbrief** in the right sidebar. By default, the panel shows the last substantive reply from that local session once the agent finishes. No workflow profile, API key or report file is required.
 
-The panel first looks for a saved summary of the selected session. If none exists, **From session history** shows the last substantive reply from that completed local session. **Worktree summary** is a shared report for the checkout, not a reply from the selected agent. If no source applies, the panel says so. Your text stays in its original language.
+**[Start here: get your first summary](docs/getting-started.md)**. Try a short task, see exactly what appears, and learn how to ask for a three-line handoff in your own language.
+
+![Threadbrief cover: a thread leads to three notes labeled Goal, Done and Next.](assets/threadbrief-cover.png)
 
 ## Install
 
 Requires Orca **1.4.268** or newer. Enable plugins under **Settings → Plugins**. Once the repository is published, install from GitHub:
 
 ```sh
-orca plugin install naqswell/orca-session-summary --json
+orca plugin install naqswell/orca-threadbrief --json
 ```
 
 Orca asks for approval before running code. Review the publisher, repository and permissions, then run the approval command printed by your own installation. Open the panel from the sidebar or with:
@@ -18,31 +20,27 @@ Orca asks for approval before running code. Review the publisher, repository and
 orca plugin open naqswell.session-summary --panel summary
 ```
 
+If you have the plugin source locally, run `orca plugin install . --json` from its directory instead. On Linux outside an Orca-managed terminal, use `orca-ide` in place of `orca` for the CLI examples.
+
 A folder installation uses `local.session-summary` instead. **If you already use that local plugin, do not install another folder under the same ID.** Install the GitHub version alongside it, check your existing reports, then disable the old plugin if you no longer need it. Do not delete your saved reports. The public release starts at `0.1.0`; it is not an in-place update to the older local series.
 
 ## Settings
 
-Click the gear beside the session title to open **Settings**. Its preferences are the same ones shown under **Settings → Plugins → Session Summary** in Orca. You can turn off the history fallback, open the panel automatically for new worktrees that have a summary, enable workflow profile actions, or change the preferred command action. History is enabled by default. Auto-open and profile actions are off.
+Click the gear beside the task title. Leave **Use the agent’s last reply** on for automatic local history. Turn it off if you only want saved reports. Expand **How to get your first summary** for a prompt you can copy and adapt. The plugin never sends it for you.
 
-Turn off **Show plugin icon on Settings button** to keep just the gear. The sidebar tab stays available. Use Orca’s own Source Control for normal GitHub or GitLab work. A known review URL can be opened from the summary.
+Under **Panel**, hide the colored plugin icon or have the panel open when a new worktree already has a saved summary. Automatic opening is off by default. You can also change preferences in Orca under **Settings → Plugins → Threadbrief**.
 
 ## Private workflows
 
-Under **Settings → Workflow profiles** in the panel, create a profile or import a local JSON file. The [example profile](examples/team-profile.json) uses neutral project data. A profile matches the beginning of an Orca project ID, not the visible workspace title. Review the matching projects before saving. Imported profiles start disabled; enable the profile and turn on **Enable workflow profile actions** when ready. If two enabled profiles match, the panel does not choose one.
+Expand **Settings → Workflow profiles** only if you want project-specific commands. Create a profile or choose **Import JSON** with a local file. The [example profile](examples/team-profile.json) uses neutral project data. A profile matches the beginning of an Orca project ID, not the visible workspace title. Preview the matches before saving. Imports start disabled; enable the profile and turn on **Show profile commands** when ready. If two enabled profiles match, the panel does not choose one.
 
-A profile describes commands as an executable and its arguments, not a shell script. Choose the shell in which you will paste the command. **Copy command** leaves the active tab alone; **Open terminal** opens a shell without entering or executing the command. `Copied` means the clipboard changed, not that a push succeeded. Edit a review draft in the panel before copying the command. An existing review link replaces the creation steps.
+A profile describes commands as an executable and its arguments, not a shell script. Choose the shell where you will paste the command. **Show first** only changes the order of two buttons on a matching command. **Copy command** copies text; **Open terminal** opens an empty shell. Neither runs the command. Use Orca’s Source Control for ordinary Git operations. An existing review link replaces the creation steps.
 
 You can allow a profile to open a review with a specific local executable instead of the browser. Inspect the executable, fixed arguments and review host. This grant is separate from importing or enabling the profile. Use only an executable you trust. Keep real profiles out of this repository. Never put credentials into a profile, summary or link.
 
-## Write a session summary
+## Save a session report
 
-This is optional. With Node.js 24, run the following from a source checkout, replacing `SESSION_ID` with the ID copied from Orca. The input file contains UTF-8 JSON, for example `{"goal":"Fix the parser","done":"Fixed parsing; tests pass","next":"Review the change"}`.
-
-```sh
-node session-summary.mjs SESSION_ID < summary.json
-```
-
-In PowerShell, use `Get-Content -Raw -Encoding utf8 summary.json | node session-summary.mjs SESSION_ID`. Add `--environment NAME` to select a paired Orca environment. The CLI checks the session before writing under `.session-summary` in your home directory. The panel also reads the older store without rewriting it.
+Use a [saved report](docs/getting-started.md#save-a-report-that-wont-change-with-the-next-reply) when the handoff should stay put as the conversation continues, or when you're using a paired environment. The guide includes a complete JSON example and writer commands for bash, zsh and PowerShell. Saved session reports take priority over history; a shared worktree report is the last fallback. The panel still reads older reports without rewriting them.
 
 ## Access and data
 
