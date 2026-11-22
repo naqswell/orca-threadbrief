@@ -15,7 +15,7 @@ async function exercisePanel(defaults) {
   const loaded = new Map()
   let inventories = 0, frameReads = 0, waitForLoad
   let checkpointSaves = 0, reportRequests = 0
-  let targetDelay
+  let targetDelay, workflowError
   let first, view = new Promise(resolve => { first = resolve })
   window.orca = {
     plugin: { on: (k, fn) => { events[k] = fn }, request: async (k, input) => {
@@ -30,7 +30,10 @@ async function exercisePanel(defaults) {
         return brief
       }
       if (k === 'frame') { frameReads++; return null }
-      if (k === 'workflow.view') return { state: 'none' }
+      if (k === 'workflow.view') {
+        if (workflowError) throw workflowError
+        return { state: 'none' }
+      }
       if (k === 'checkpoint.target') {
         const selected = view
         if (targetDelay) await targetDelay
@@ -222,6 +225,7 @@ async function exercisePanel(defaults) {
   pair.querySelector('summary').click(); await delay(20)
   check(frameReads === 2, 'Expanding the pair did not fetch its images')
   view = summary('On demand'); refresh.click(); await delay(5)
+  create().focus()
   create().click(); await delay(5)
   const handoff = $('#handoff-dialog')
   check(handoff.open && handoff.scrollWidth <= handoff.clientWidth && handoff.innerText.includes('normal tokens') && $('#checkpoint-target').textContent.includes('Paired server') && !checkpointSaves, 'Opening handoff hid costs, the target, or captured without consent')
@@ -229,10 +233,19 @@ async function exercisePanel(defaults) {
   $('#save-checkpoint').click(); await delay(5)
   check(checkpointSaves === 1 && $('#checkpoint-status').textContent.includes('1 saved'), 'Explicit capture did not confirm the checkpoint')
   $('#close-handoff').click()
+  check(document.activeElement === create(), 'Closing the saved summary lost keyboard focus')
   check($('main .prose td')?.textContent === 'Room booked' && $('main').innerText.includes('revision 1') && !$('main header details').open && $('main header details').textContent.includes('Capacity verified'), 'Custom report or compact underlying facts missing')
   check(create().closest('footer') && !$('#reader-tools #open-handoff'), 'Writing still competes with the reader toolbar')
   create().click(); await delay(5)
   check(handoff.open && $('#checkpoint-prompt').textContent.includes('\"revision\":2') && checkpointSaves === 1, 'Revising a saved summary lost its revision or wrote it without consent')
+  $('#close-handoff').click(); await delay(5)
+  view = { ...view, reportSessionKey: undefined }
+  workflowError = Error('Workflow offline')
+  for (let i = 0; i < 2; i++) {
+    refresh.click(); await delay(5)
+    check($('main').innerText.includes('Workflow offline') && !$('#reload-feedback').textContent, `False reload success on attempt ${i + 1}`)
+  }
+  check(!create() && $('main').innerText.includes('Room booked'), 'Read-only summary offered a revision or lost its text')
 }
 
 const chrome = [process.env.CHROME_PATH, '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', '/usr/bin/google-chrome', '/usr/bin/chromium', process.env.ProgramFiles && join(process.env.ProgramFiles, 'Google/Chrome/Application/chrome.exe')].find(p => p && existsSync(p))

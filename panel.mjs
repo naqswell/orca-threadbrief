@@ -197,7 +197,7 @@ function drawSummary(view, workflow) {
   }
 }
 function drawSummaryAction(view) {
-  if (view.scope !== 'session' || (view.summary && !view.summary.checkpoint) || ['waiting', 'historyOff', 'pairedOff', 'unavailable'].includes(view.emptyReason)) return
+  if (!view.reportSessionKey || (view.summary && !view.summary.checkpoint) || ['waiting', 'unavailable'].includes(view.emptyReason)) return
   const revision = view.summary?.checkpoint?.revision ?? 0
   const footer = node('footer', undefined, main, 'summary-action')
   const control = button(footer, revision ? 'Revise saved summary…' : 'Save a summary…', openHandoff)
@@ -366,10 +366,11 @@ async function refresh(leaving = false, apply = true, loadFor) {
       view.scope === 'none' ? 'Select a finished agent conversation to preview a recap.' : ''
     updatePreviewControl()
     const key = JSON.stringify([view, !view.summary && working, workflow, workflowResult.error?.message, original?.key && dirtyDrafts.has(original.key)])
+    const reloadSucceeded = !refreshBrief.hidden && !workflowResult.error && view.emptyReason !== 'unavailable'
     if (key === rendered && contextKey === displayedContext) {
       confirmed = result
       pendingUpdate(false)
-      return view.emptyReason === 'unavailable' ? undefined : 'No changes'
+      return reloadSucceeded ? 'No changes' : undefined
     }
     if (!apply && !leaving && displayedContext === contextKey && view.scope !== 'excluded' && holdUpdate()) {
       pendingUpdate(true)
@@ -391,7 +392,7 @@ async function refresh(leaving = false, apply = true, loadFor) {
     const nextEditor = main.querySelector('details[data-draft-key]')
     if (nextEditor?.dataset.draftKey === openKey) nextEditor.open = true
     confirmed = result
-    return view.emptyReason === 'unavailable' ? undefined : 'Reloaded'
+    return reloadSucceeded ? 'Reloaded' : undefined
   } catch (error) {
     if (ticket !== generation || document.hidden) return
     if (!leaving && !apply && holdUpdate()) { pendingUpdate(true); return }
@@ -802,9 +803,18 @@ refreshBrief.addEventListener('pointerenter', resetRefreshHint)
 refreshBrief.addEventListener('focus', resetRefreshHint)
 refreshBrief.addEventListener('click', () => { refreshHint.hidden = true })
 document.addEventListener('keydown', event => { if (event.key === 'Escape') refreshHint.hidden = true })
-let handoffVisit = 0, checkpointKey
-handoff.addEventListener('close', () => { ++handoffVisit; checkpointKey = undefined })
-document.querySelector('#close-handoff').addEventListener('click', () => handoff.close())
+let handoffVisit = 0, checkpointKey, handoffSession
+function finishHandoff() {
+  if (handoff.open || !handoffSession) return
+  ++handoffVisit
+  checkpointKey = undefined
+  if (handoffSession === handoffTarget?.sessionKey && (document.activeElement === document.body || handoff.contains(document.activeElement))) {
+    document.getElementById('open-handoff')?.focus({ preventScroll: true })
+  }
+  handoffSession = undefined
+}
+handoff.addEventListener('close', finishHandoff)
+document.querySelector('#close-handoff').addEventListener('click', () => { handoff.close(); finishHandoff() })
 const draftInput = document.querySelector('#report-draft'), importDraft = document.querySelector('#import-draft')
 function draftReady() { importDraft.disabled = !checkpointKey || !draftInput.value.trim() }
 draftInput.addEventListener('input', draftReady)
@@ -829,6 +839,7 @@ async function openHandoff(event) {
       return
     }
     document.querySelector('#handoff-title').textContent = target.revision ? 'Revise saved summary' : 'Save a session summary'
+    handoffSession = expected.sessionKey
     handoff.showModal()
     checkpointKey = target.key
     checkpointTarget.textContent = `${target.title} · ${target.environment === 'local' ? 'This desktop' : 'Paired server'}`

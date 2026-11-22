@@ -1,5 +1,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { saveSession } from '../store.mjs'
 import { bindSources } from '../sources.mjs'
 import { bindRecaps } from '../recaps.mjs'
 const base = async () => ({key:'peer-source', revision:0, fields:null})
@@ -24,7 +28,9 @@ test('paired history and generation target only the confirmed peer; disconnect, 
     throw Error('Unexpected command')
   }
   const settings = async () => ({ pairedHistory: enabled, summaryStrategy: 'brief' })
-  const sources = bindSources(orca, { settings, command, focus, roots: [], reveal() {} }); t.after(sources.stop)
+  const root = await mkdtemp(join(tmpdir(), 'threadbrief-paired-'))
+  t.after(() => rm(root, {recursive:true, force:true}))
+  const sources = bindSources(orca, { settings, command, focus, roots: [root], reveal() {} }); t.after(sources.stop)
   bindRecaps(orca, { settings, command, base, target: sources.recapTarget, source: sources.recapSource })
   assert.equal((await sources.focused()).outcome, 'The peer outcome.')
   const preview = await previewOne(handlers, 'remote-agent')
@@ -40,6 +46,14 @@ test('paired history and generation target only the confirmed peer; disconnect, 
   assert.ok(calls.every(c => c[1] === 'list'))
   calls.length = 0; enabled = false; actualId = 'same'
   assert.equal((await sources.focused()).emptyReason, 'pairedOff')
+  await saveSession(root, 'peer', 'same', {goal:'Seat six guests', done:'Booked room', next:'Send invitations', checkpoint:{revision:1, decisions:'Room A', checks:'Eight seats', open:'None'}})
+  for (const [connected, history] of [[true, false], [false, true], [true, true]]) {
+    online = connected; enabled = history
+    const view = await sources.focused()
+    assert.equal(view.summary.goal, 'Seat six guests')
+    assert.equal(Boolean(view.reportSessionKey), connected && history)
+  }
+  calls.length = 0
   enabled = true
   await sources.exclusions.set({ kind: 'session', host: 'peer', id: 'same', excluded: true })
   assert.equal((await sources.focused()).excluded, 'session')

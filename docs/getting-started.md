@@ -30,6 +30,8 @@ Use a checkpoint when one task spans many turns. Instead of asking another agent
 2. Once the agent finishes, choose **Save summary** in the same dialog before its next reply. Threadbrief verifies the host and session and checks the end of the latest finished reply. Only the marked summary is saved on this desktop. The panel shows **Saved summary · revision N**.
 3. At each milestone, repeat with the latest instructions. The new report replaces the previous one, carrying forward decisions and evidence that still apply. Nothing runs between saves. If you started late or cleared the chat, state what is unknown rather than claiming full coverage.
 
+If history is off or a paired server is disconnected, you can still read a saved summary. To revise it, enable history for that session and wait for a finished turn on the connected host.
+
 For agents: finish the reply with this fenced JSON block. Use the conversation’s language, one line of text per field (up to 480 characters). Start at revision 1 and increase it on each update. Use “None” for an empty field; do not invent missing history.
 
 ````text

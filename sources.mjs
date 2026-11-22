@@ -7,6 +7,7 @@ import { createExclusions } from './exclusions.mjs'
 const identity = id => typeof id === 'string' && id.startsWith('identity:wt2:')
 const focusKey = value => value && JSON.stringify([value.workspace, value.host, value.tab, value.leaf, value.kind, value.entity, value.sessionId])
 const acknowledgement = /^(?:(?:ok(?:ay)?|done|thanks|thank you|got it|yes|no|да|нет|ок|окей|понял[аи]?|готово|сделано|спасибо)[\s\p{P}]*)+$/iu
+const historyBlock = (session, prefs) => prefs.historyOutcome === false ? 'historyOff' : session?.environment !== 'local' && prefs.pairedHistory === false ? 'pairedOff' : undefined
 function substantiveReply(text) {
   const reply = typeof text === 'string' ? text.trim() : ''
   if (!reply || (reply.length <= 96 && acknowledgement.test(reply))) return null
@@ -82,7 +83,7 @@ export function bindSources(orca, { settings, reveal, roots = [directory, legacy
     const [active, selected] = await Promise.all([context(), getFocus()])
     const { session, excluded } = await exclusions.check({ active, selected }, () => resolve(active, selected))
     const prefs = await settings()
-    if (excluded || prefs.historyOutcome === false || (session?.environment !== 'local' && prefs.pairedHistory === false)) throw Error('History is off for this selection.')
+    if (excluded || historyBlock(session, prefs)) throw Error('History is off for this selection.')
     const live = session?.environment && session.environment !== 'local' ? await remoteState(session, active.workspaceId) : session
     if (!session || !live || live.state !== 'done' || (session.environment === 'local' && selected.host && selected.host !== 'local')) throw Error('Select a finished agent on a connected Orca host.')
     await verifySelection(start, active.workspaceId, focusKey(selected))
@@ -164,30 +165,28 @@ export function bindSources(orca, { settings, reveal, roots = [directory, legacy
       }
       if (!revalidate) return saved.workflow
     }
-    let working = false
+    const blocked = historyBlock(session, prefs)
+    let live = session
     let brief
     let view = session ? { scope: 'session', title: session.title, summary: null } : { scope: 'none', summary: null }
     checkGeneration(start)
     if (!includePublication) observedPane = current
     if (excluded) view = { scope: 'excluded', excluded, summary: null }
     else if (session) {
-      working = session.state === 'working'
       const saved = await find(['sessions', session.environment], sessionFilename(session.id), current)
       if (saved) {
         current.source = saved; view.summary = saved.value
         if (session.environment !== 'local') {
-          const live = await remoteState(session, workspaceId)
-          working = live?.state === 'working'
+          live = await remoteState(session, workspaceId)
           Object.assign(current, { monitor: true, nextCheck: Date.now() + 4000, liveState: live?.state, updatedAt: live?.updatedAt })
         }
       } else {
         checkGeneration(start)
         const paired = session.environment !== 'local'
-        if (prefs.historyOutcome === false) view.emptyReason = 'historyOff'
-        else if (paired && prefs.pairedHistory === false) view.emptyReason = 'pairedOff'
+        if (blocked) view.emptyReason = blocked
         else {
-          const live = paired ? await remoteState(session, workspaceId) : session
-          working = live?.state === 'working'
+          if (paired) live = await remoteState(session, workspaceId)
+          const working = live?.state === 'working'
           if (paired) Object.assign(current, { monitor: true, nextCheck: Date.now() + 4000, liveState: live?.state, updatedAt: live?.updatedAt })
           if (!live) view.emptyReason = 'unavailable'
           else if (working || live.state === 'done') {
@@ -232,8 +231,12 @@ export function bindSources(orca, { settings, reveal, roots = [directory, legacy
       completed.set(contextKey, brief)
       if (completed.size > 12) completed.delete(completed.keys().next().value)
     }
-    if (!includePublication) { view.contextKey = manual ? loadKey : contextKey; view.working = working; view.manual = manual }
-    if (!includePublication && view.scope === 'session') view.reportSessionKey = contextKey
+    if (!includePublication) {
+      view.contextKey = manual ? loadKey : contextKey
+      view.working = view.scope !== 'excluded' && live?.state === 'working'
+      view.manual = manual
+      if (view.scope === 'session' && !blocked && (view.working || live?.state === 'done')) view.reportSessionKey = contextKey
+    }
     if (view.scope !== 'none') view.workspaceId = workspaceId
     if (manual && loadFor && !excluded && (view.summary || view.outcome)) {
       const saved = manualBriefs.get(contextKey) ?? {}

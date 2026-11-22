@@ -51,6 +51,18 @@ test('a fresh install shows the finished reply without any profiles or summary f
   assert.equal(off.emptyReason, 'historyOff')
 })
 
+test('a saved checkpoint stays readable when history or the agent cannot supply a revision', async t => {
+  const f = await fixture(t)
+  const report = { ...record('Room booked'), checkpoint: {revision:1, decisions:'Room A', checks:'Verified', open:'None'} }
+  await save(f.roots[0], ['sessions', 'local'], sessionFilename('first'), report)
+  for (const [history, state] of [[false, 'done'], [true, 'idle'], [true, 'done']]) {
+    f.setHistory(history); f.setState(state)
+    const view = await f.sources.focused()
+    assert.equal(view.summary.goal, report.goal)
+    assert.equal(Boolean(view.reportSessionKey), history && state === 'done', `history=${history}, state=${state}`)
+  }
+})
+
 test('a short final update does not displace the work it confirms, even during the next turn', async t => {
   const f = await fixture(t)
   const message = text => ({role:'assistant', kind:'message', text})

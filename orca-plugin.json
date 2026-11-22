@@ -2,7 +2,7 @@
   "manifestVersion": 2,
   "id": "session-summary",
   "name": "Threadbrief",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "icon": "assets/session-summary.png",
   "cover": { "path": "assets/threadbrief-cover.png", "alt": "Threadbrief: a mint thread leads to a stack of notes labeled Goal, Done and Next." },
   "description": "Keep a running report for each agent session: goal, result, confirmation and next step. Update at a milestone, not on every message.",
