@@ -103,8 +103,8 @@ async function showFrame(parent, label, title, id, hash) {
 }
 function drawSummary(view, workflow) {
   if (view.scope === 'manual') {
-    node('h2', 'On-demand brief', main)
-    node('p', 'Load the selected session’s brief when you need it. No model call.', main)
+    if (manualKey) main.append(document.querySelector('#manual-welcome').content.cloneNode(true))
+    else node('p', 'Select a session in Orca to load its brief.', main, 'empty-hint')
     return
   }
   if (view.scope === 'excluded') {
@@ -472,7 +472,7 @@ const modelInput = document.querySelector('#recap-model'), modelForm = document.
 const saveModel = modelForm.querySelector('button')
 const modelChoice = document.querySelector('#model-choice'), addModel = ' add '
 const historyKey = agent => `recap-models-${agent}`
-let savingChoice = false
+let savingChoice = false, currentCatalogKey
 let sourceHint = '', listHint = '', historyEnabled = true, recapPending = false
 function updatePreviewControl() {
   agentHint.textContent = listHint || (!historyEnabled ? 'Turn on session history to preview a recap.' : sourceHint)
@@ -499,6 +499,7 @@ async function showStrategy(values, revision) {
   const storedModel = (values.recapModel ?? '').trim()
   historyEnabled = values.historyOutcome !== false
   recapAgent.disabled = true
+  currentCatalogKey = undefined
   modelForm.hidden = true
   recapAgent.replaceChildren(new Option('Loading agents…', ''))
   listHint = ''
@@ -523,10 +524,23 @@ async function showStrategy(values, revision) {
   recapAgent.disabled = !agents.length
   listHint = !agents.length ? 'Enable an agent in Orca Settings → Agents on this host.' : !recapAgent.value ? 'Your preferred agent is unavailable in this workspace.' : ''
   const agent = recapAgent.value
-  const saved = agent ? await api.storage.get(historyKey(agent)).catch(() => null) : null
+  const key = agents.find(a => a.id === agent)?.catalogKey
+  const [saved, catalog] = await Promise.all([
+    agent ? api.storage.get(historyKey(agent)) : null,
+    key ? api.storage.get(key) : null
+  ])
   if (revision !== settingsRevision || !dialog.open) return
-  const choices = new Set([storedModel, ...(Array.isArray(saved) ? saved : [])].filter(m => typeof m === 'string' && m))
-  modelChoice.replaceChildren(new Option('Use agent’s default', ''), ...Array.from(choices, m => new Option(m, m)), new Option('Add a model…', addModel))
+  currentCatalogKey = key
+  const reported = Array.isArray(catalog) ? catalog : []
+  const ids = new Set(reported.map(m => m.id))
+  const choices = new Set([storedModel, ...(Array.isArray(saved) ? saved : [])].filter(m => typeof m === 'string' && m && !ids.has(m)))
+  const group = document.createElement('optgroup')
+  group.label = 'Reported by ' + (recapAgent.selectedOptions[0]?.textContent ?? agent)
+  for (const { id, name } of reported) {
+    const option = new Option(name && name !== id ? `${name} · ${id}` : id, id)
+    group.append(option)
+  }
+  modelChoice.replaceChildren(new Option('Use agent’s default', ''), ...(group.children.length ? [group] : []), ...Array.from(choices, m => new Option(m, m)), new Option('Add a model…', addModel))
   modelChoice.value = storedModel
   modelForm.hidden = true
   document.querySelector('#model-help').textContent = `Copy the exact identifier from ${recapAgent.selectedOptions[0]?.textContent || 'the agent'}’s model picker or settings. Threadbrief remembers it here.`
@@ -534,14 +548,14 @@ async function showStrategy(values, revision) {
 }
 dialog.addEventListener('close', clearRecap)
 modelInput.addEventListener('input', updatePreviewControl)
-async function saveChoice(agent, model) {
+async function saveChoice(agent, model, remember = false) {
   if (savingChoice) return
   clearRecap()
   savingChoice = recapAgent.disabled = true
   updatePreviewControl()
   try {
     if (!agent) throw Error('Choose an installed Orca agent first.')
-    if (model) {
+    if (remember) {
       const key = historyKey(agent), saved = await api.storage.get(key)
       await api.storage.set(key, [model, ...(Array.isArray(saved) ? saved.filter(m => m !== model) : [])].slice(0, 16))
     }
@@ -565,7 +579,7 @@ modelForm.addEventListener('submit', event => {
   event.preventDefault()
   const model = modelInput.value.trim()
   if (!model || /^-/u.test(model) || /\s|[\u0000-\u001f\u007f]/u.test(model)) { recapStatus.textContent = 'Paste the identifier, not the display name. It cannot contain spaces.'; return }
-  void saveChoice(recapAgent.value, model)
+  void saveChoice(recapAgent.value, model, true)
 })
 recapAgent.addEventListener('change', () => { void saveChoice(recapAgent.value, '') })
 previewRecap.addEventListener('click', async () => {
@@ -612,6 +626,9 @@ dialog.addEventListener('change', async ({ target }) => {
 api.settings.onDidChange(({ key }) => {
   if (key === 'recapAgent' || key === 'recapModel') clearRecap()
   if (dialog.open || key === 'showPanelIcon' || key === 'pauseWhileReading') void loadPreferences()
+})
+api.storage.onDidChange(({ key }) => {
+  if (key === currentCatalogKey && dialog.open && recapSettings.open && modelForm.hidden) void loadPreferences()
 })
 const exclusionsPanel = document.querySelector('#exclusions')
 const exclusionStatus = document.querySelector('#exclusion-status')

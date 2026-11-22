@@ -47,6 +47,24 @@ test('shows actual preferences and applies a patch without disturbing others', a
   assert.deepEqual(await config({op:'apply', value:{manualLoad:true, recapModel:'vendor/model'}}), {...defaults, unrelated:'preserved', manualLoad:true, recapModel:'vendor/model'})
 })
 
+test('an agent replaces its reported models without changing pins or other hosts and agents', async () => {
+  const {config, prefs} = setup()
+  const local = {environment:'local', agent:'writer'}, remote = {...local, environment:'peer'}, other = {...local, agent:'reader'}
+  const list = value => config({op:'models',value})
+  const set = (scope, models) => config({op:'set-models',value:{...scope,models}})
+  prefs.recapModel = 'chosen'
+  await set(remote, [{id:'remote-only'}])
+  await set(local, [{id:'one',name:'First'}, {id:'two'}])
+  await assert.rejects(set(local, [{id:'duplicate'}, {id:'duplicate'}]))
+  await assert.rejects(set(local, [{id:'--prompt'}]))
+  assert.deepEqual(await list(local), [{id:'one',name:'First'}, {id:'two'}])
+  await set(local, [])
+  assert.deepEqual(await list(local), [])
+  assert.deepEqual(await list(remote), [{id:'remote-only'}])
+  assert.deepEqual(await list(other), [])
+  assert.equal(prefs.recapModel, 'chosen')
+})
+
 test('reports partial writes and detects settings not actually saved', async () => {
   const {config, prefs, state} = setup()
   state.fail = 'historyOutcome'

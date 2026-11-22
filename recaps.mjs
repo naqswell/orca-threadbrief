@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { catalogKey } from './model-catalog.mjs'
 
 const strategies = {
   brief: { entries: 12, chars: 3000, instruction: 'Use up to 90 words: goal, outcome and next step.' },
@@ -37,7 +38,10 @@ export function bindRecaps(orca, { target, source, command, settings }) {
     if (!Array.isArray(found?.agents)) throw Error('Orca could not confirm the agents available in this workspace.')
     return found.agents.filter(a => typeof a?.id === 'string' && a.id).map(({ id, name, default: preferred }) => ({ id, name: name || id, preferred: !!preferred }))
   }
-  orca.panels.handle('recap.agents', async () => agents(await target()))
+  orca.panels.handle('recap.agents', async () => {
+    const scope = await target()
+    return (await agents(scope)).map(agent => ({ ...agent, catalogKey: catalogKey(scope.environment, agent.id) }))
+  })
   orca.panels.handle('recap.preview', async ({ agent } = {}) => {
     const ticket = ++revision
     preview = undefined

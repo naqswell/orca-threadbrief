@@ -28,6 +28,21 @@ Use `orca agent installed --environment local --worktree active --json` to disco
 
 `manualLoad` controls **when the panel reads**. `summaryStrategy` controls **what a requested recap does**: `instant` displays existing material; `brief` and `handoff` offer a preview and a separate start action. Neither setting authorizes sending an excerpt to a provider. See [strategies and budgets](getting-started.md#choose-a-strategy-and-an-agent).
 
+### Let an agent fill the model picker
+
+With **Threadbrief 0.2.6 or later**, ask the agent: “List the chat models your configured account can use on this Orca host and register them in Threadbrief. Leave my selected model alone.” The agent should use its own model-list command or authenticated model picker, not a public list of everything a provider sells. If it cannot enumerate available models, leave the existing catalog alone.
+
+For OMP, run this on the desktop when the source environment is `local`. It uses OMP's launch selector, not a display name. No chat is started.
+
+```sh
+omp models --json | jq -e '[.models[] | {id: .selector, name}] | select(length > 0)' | node threadbrief-config.mjs set-models - --agent omp --environment local --plugin local.session-summary
+node threadbrief-config.mjs models --agent omp --environment local --plugin local.session-summary
+```
+
+For other agents, pass a UTF-8 JSON file instead of `-`. Use an array such as `[{"id":"provider/exact-id","name":"Display name"}]`, replacing the example with real launch IDs; `name` is optional. For a paired server, collect the list **on that server** using the relevant account, transfer only the IDs and labels to the desktop, then run `set-models` on the desktop with the server’s **environment ID** and actual Orca agent ID. No credentials belong in this file.
+
+A successful write returns the environment, agent and number of models. **Settings → Recap strategy and model → Model** shows the list under **Reported by** for that agent on that host. Re-register after changing accounts or available models: each write replaces that one list. Send `[]` deliberately to clear it. A failed collection is not an empty catalog. Registration never pins a model or changes a previous pin.
+
 ## Exclude or restore a selection
 
 ```sh

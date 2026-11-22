@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs'
+import { catalogKey, validateModels } from './model-catalog.mjs'
 
 const manifest = JSON.parse(readFileSync(new URL('./orca-plugin.json', import.meta.url), 'utf8'))
 const settings = new Map(manifest.contributes.settings.map(setting => [setting.key, setting]))
@@ -46,6 +47,13 @@ export function createConfig(orca, exclusions, profiles) {
     switch (op) {
       case 'show': return show()
       case 'apply': return apply(value)
+      case 'models': return await orca.storage.get(catalogKey(value?.environment, value?.agent)) ?? []
+      case 'set-models': {
+        const key = catalogKey(value?.environment, value?.agent)
+        const models = validateModels(value.models)
+        await orca.storage.set(key, models)
+        return { environment: value.environment, agent: value.agent, count: models.length }
+      }
       case 'exclusions': return exclusions.list()
       case 'exclude':
       case 'include':

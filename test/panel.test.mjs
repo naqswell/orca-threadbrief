@@ -23,11 +23,11 @@ async function exercisePanel(defaults) {
         return { ...view, manual: true }
       }
       if (k === 'workflow.view') return { state: 'none' }
-      if (k === 'recap.agents') { inventories++; return [{ id: 'a', name: 'Agent A', preferred: true }, { id: 'b', name: 'Agent B' }] }
+      if (k === 'recap.agents') { inventories++; return [{ id: 'a', name: 'Agent A', preferred: true, catalogKey:'catalog-a' }, { id: 'b', name: 'Agent B', catalogKey:'catalog-b' }] }
       if (k === 'recap.preview') return { token: 'preview-a', title: 'Third', agent: 'a', model: prefs.recapModel, environment: 'local', prompt: 'Approved for Agent A' }
     } },
     settings: { get: async key => key ? prefs[key] : prefs, set: async (key, value) => { prefs[key] = value; events.settings({ key }) }, onDidChange: fn => { events.settings = fn } },
-    storage: { get: async key => JSON.parse(localStorage.getItem(key)), set: async (key, value) => localStorage.setItem(key, JSON.stringify(value)) }
+    storage: { get: async key => JSON.parse(localStorage.getItem(key)), set: async (key, value) => { localStorage.setItem(key, JSON.stringify(value)); events.storage({key}) }, onDidChange: fn => { events.storage = fn } }
   }
   const changed = reason => events['summary.changed']({ reason })
   const check = (ok, message) => { if (!ok) throw Error(message) }
@@ -63,6 +63,14 @@ async function exercisePanel(defaults) {
   check(!$('#preview-recap').disabled, 'Open settings did not notice the session finished')
   const choice = $('#model-choice'), model = $('#recap-model'), form = $('#recap-model-form')
   check(choice.value === '' && form.hidden, 'Fresh install required a model identifier')
+  await window.orca.storage.set('catalog-a', [{id:'example/quick',name:'Quick'}]); await delay(5)
+  check(choice.value === '' && choice.querySelector('optgroup option')?.textContent.includes('Quick'), 'Agent registration did not update the open picker or changed the pin')
+  choice.value = 'example/quick'; choice.dispatchEvent(new Event('change')); await delay(5)
+  check(prefs.recapModel === 'example/quick', 'Selecting a reported name did not pin the exact ID')
+  await window.orca.storage.set('catalog-a', []); await delay(5)
+  check(choice.value === 'example/quick', 'Catalog replacement silently cleared a pin')
+  choice.value = ''; choice.dispatchEvent(new Event('change')); await delay(5)
+  check(![...choice.options].some(o => o.value === 'example/quick'), 'Withdrawn model was added to manual history')
   choice.selectedIndex = choice.options.length - 1; choice.dispatchEvent(new Event('change'))
   model.value = 'provider/version-1'; model.dispatchEvent(new Event('input'))
   check($('#preview-recap').disabled, 'Unsaved model allowed a preview')
@@ -99,9 +107,15 @@ async function exercisePanel(defaults) {
   view = summary('On demand'); changed('history-setting'); await delay(5)
   const load = $('#manual-load')
   check(prefs.manualLoad && !load.hidden && load.textContent === 'Load brief' && !$('main .prose'), 'Manual mode read a brief before a click')
+  const heading = $('.manual-welcome h2').getBoundingClientRect(), action = load.getBoundingClientRect()
+  check(heading.top > innerHeight / 4 && action.top > heading.bottom && action.bottom < innerHeight, 'On-demand action was not grouped in the tall panel')
+  window.frameElement.height = '230'
+  check(load.getBoundingClientRect().bottom <= innerHeight && !$('.manual-welcome svg').getClientRects().length, 'Short panel pushed the action below the fold')
+  window.frameElement.height = '650'
   load.click(); await delay(5)
   const paragraph = $('main .prose p')
   check(paragraph?.textContent === view.outcome && load.textContent === 'Refresh brief', 'Click did not load the selected brief')
+  check(!$('.manual-welcome') && $('main h1').getBoundingClientRect().top < 60, 'Loaded brief retained the empty layout')
   view = { ...view, outcome: 'Changed on host' }; changed('session'); await delay(5)
   check($('main .prose p') === paragraph && paragraph.textContent !== view.outcome, 'Background update replaced a manual brief')
   load.click(); await delay(5)

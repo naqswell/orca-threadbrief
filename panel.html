@@ -13,8 +13,22 @@
   </button>
   <p id="status" role="status" aria-live="polite"></p>
   <p id="loading" class="muted" role="status">Loading summary…</p>
-  <main aria-label="Summary" aria-busy="true" tabindex="0" hidden></main>
-  <button id="manual-load" type="button" hidden>Load brief</button>
+  <template id="manual-welcome">
+    <div class="manual-welcome">
+      <svg aria-hidden="true" width="48" height="48" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+        <path opacity=".35" d="m7 32 13 7a4 4 0 0 0 4 0l16-9" stroke-width="2"/>
+        <path opacity=".65" d="m7 26 13 7a4 4 0 0 0 4 0l16-9" stroke-width="2"/>
+        <path d="m8 18 16-9a4 4 0 0 1 4 0l12 7a2 2 0 0 1 0 3l-16 9a4 4 0 0 1-4 0L8 21a1.7 1.7 0 0 1 0-3Z" fill="currentColor" fill-opacity=".12" stroke-width="2"/>
+        <path d="m18 19 7-4m-3 6 7-4" stroke-width="1.6"/>
+      </svg>
+      <h2>Catch up on this session</h2>
+      <p>Read the saved handoff or last reply.<br>No model call.</p>
+    </div>
+  </template>
+  <div id="brief-content">
+    <main aria-label="Summary" aria-busy="true" tabindex="0" hidden></main>
+    <button id="manual-load" type="button" hidden>Load brief</button>
+  </div>
   <div id="reader-tools">
     <span id="agent-working" role="status" hidden>Agent working</span>
     <button type="button" id="refresh-brief" aria-label="Refresh summary" hidden>Update available · Refresh</button>

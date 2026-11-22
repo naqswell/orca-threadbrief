@@ -41,6 +41,22 @@ nav button { padding: 0; border: 0; background: none; text-decoration: underline
 @media (pointer: coarse) { #open-settings { width: 44px; height: 44px } }
 #status:not(:empty) { margin-bottom: 8px }
 #manual-load { margin-top: 10px }
+#brief-content:has(main:not([hidden]) > .manual-welcome) {
+  display: grid; align-content: center; justify-items: center; row-gap: 18px;
+  min-block-size: calc(100svh - 36px); padding: 42px 0 max(28px, 13svh); text-align: center;
+}
+.manual-welcome { display: grid; justify-items: center; gap: 6px; max-width: 30ch }
+.manual-welcome svg { margin-bottom: 6px; color: var(--orca-primary, currentColor) }
+.manual-welcome h2 { font-size: clamp(17px, 5vw, 21px); line-height: 1.25 }
+.manual-welcome p { color: var(--orca-muted-foreground, #555) }
+#brief-content:has(.manual-welcome) #manual-load {
+  min-height: 40px; margin: 0; padding-inline: 20px; font-weight: 600;
+  color: var(--orca-primary-foreground, var(--orca-background, white)); background: var(--orca-primary, var(--orca-foreground, #222));
+}
+@media (max-height: 340px) {
+  .manual-welcome svg { display: none }
+  #brief-content:has(main:not([hidden]) > .manual-welcome) { padding-block: 34px 12px; row-gap: 10px }
+}
 .empty-hint { margin-top: 8px }
 .guide-link { padding: 4px 0; border: 0; background: transparent; text-decoration: underline; text-underline-offset: 2px }
 #open-settings { position: absolute; z-index: 2; inset: 12px 14px auto auto }

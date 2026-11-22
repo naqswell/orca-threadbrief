@@ -31,7 +31,7 @@ A folder installation uses `local.session-summary` instead. **If you already use
 
 ## Settings
 
-Click the gear beside the task title. **Brief recap** (default) asks for up to 90 words; **Detailed handoff** asks for up to 400. Choose an installed agent and keep **Use agent’s default**, or pin a model under **Model → Add a model…**. Check the agent, model, host and excerpt before starting. **Instant** only shows existing text. [Compare strategies and costs](docs/getting-started.md#choose-a-strategy-and-an-agent).
+Click the gear beside the task title. **Brief recap** (default) asks for up to 90 words; **Detailed handoff** asks for up to 400. In **Recap strategy and model**, keep the agent’s default or pick a model from the [list reported by your agent](docs/configuration.md#let-an-agent-fill-the-model-picker). Check the agent, model, host and excerpt before starting. **Instant** only shows existing text. [Compare strategies and costs](docs/getting-started.md#choose-a-strategy-and-an-agent).
 
 Prefer to load a brief yourself? Turn on **Load briefs only on click**. Select a session and click **Load brief**. The result stays unchanged until you click **Refresh brief**. Neither button calls a model.
 
