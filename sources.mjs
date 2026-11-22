@@ -34,12 +34,15 @@ async function pairedAddress(id, command, environment) {
 }
 export function bindSources(orca, { settings, reveal, roots = [directory, legacyDirectory], command = orcaJson, focus = readFocus, interval = 1000 }) {
   const listeners = new Set(), created = new Map()
-  const completed = new Map()
+  const completed = new Map(), manualBriefs = new Map()
   let selection, observedPane, timer, stopped = false, checking = false, generation = 0
   const context = () => orca.host.call('workspace.readContext')
   const getFocus = () => focus().catch(() => null)
   const post = reason => { if (listeners.size && !stopped) orca.panels.post('summary.changed', { reason }) }
-  const invalidate = reason => { generation++; selection = null; post(reason) }
+  const invalidate = reason => {
+    if (reason === 'history-setting' || reason === 'exclusions') { completed.clear(); manualBriefs.clear() }
+    generation++; selection = null; post(reason)
+  }
   let observedWorkspace
   async function verifySelection(start, workspaceId, key) {
     const [after, selectedAfter] = await Promise.all([context(), getFocus()])
@@ -55,7 +58,7 @@ export function bindSources(orca, { settings, reveal, roots = [directory, legacy
     const session = await resolve(active, selected)
     return { active, selected, session }
   }
-  const exclusions = createExclusions(orca, metadata, () => { completed.clear(); invalidate('exclusions') })
+  const exclusions = createExclusions(orca, metadata, () => invalidate('exclusions'))
   const selector = id => /^(?:folder:|identity:wt2:)/u.test(id) ? id : `id:${id}`
   async function recapTarget() {
     const selected = await getFocus()
@@ -125,22 +128,33 @@ export function bindSources(orca, { settings, reveal, roots = [directory, legacy
     const start = generation
     const [active, prefs] = await Promise.all([context(), settings()])
     const manual = prefs.manualLoad === true
-    if (manual && includePublication && !loadFor) return { scope: 'manual' }
+    if (manual && includePublication && !loadFor && !manualBriefs.size) return { scope: 'manual' }
     const workspaceId = active?.workspaceId
     observedWorkspace = workspaceId
     if (!workspaceId) return { scope: 'none', summary: null, manual }
     const selected = await getFocus(), key = focusKey(selected)
     const current = { start, key, files: new Set(), workspaceId, selected, source: null, agent: null, manual }
     const loadKey = manual && selected ? JSON.stringify([workspaceId, key]) : undefined
-    if (manual && (!loadKey || loadFor !== loadKey)) {
-      checkGeneration(start)
-      if (loadFor) throw Error('The active selection changed. Load the brief again.')
-      if (!includePublication && (!selection?.manual || selection.key !== key || selection.workspaceId !== workspaceId)) selection = current
+    const welcome = () => {
+      if (!includePublication) selection = current
       return { scope: 'manual', manual, contextKey: loadKey }
+    }
+    if (manual) {
+      checkGeneration(start)
+      if (loadFor && loadFor !== loadKey) throw Error('The active selection changed. Load the brief again.')
+      if (!loadFor && (!manualBriefs.size || !loadKey)) return welcome()
     }
     const { session, excluded } = await exclusions.check({ active, selected }, () => resolve(active, selected))
     current.agent = session
     const contextKey = JSON.stringify([workspaceId, session?.environment ?? selected?.host, session?.id ?? key])
+    const slot = includePublication ? 'workflow' : 'panel'
+    if (manual && !loadFor) {
+      await verifySelection(start, workspaceId, key)
+      const saved = !excluded && session && manualBriefs.get(contextKey)
+      if (!saved?.[slot]) return welcome()
+      if (!includePublication) { current.source = saved.source; observedPane = selection = current }
+      return includePublication ? saved.workflow : { ...saved.panel, contextKey: loadKey }
+    }
     let working = false
     let view = session ? { scope: 'session', title: session.title, summary: null } : { scope: 'none', summary: null }
     checkGeneration(start)
@@ -205,6 +219,14 @@ export function bindSources(orca, { settings, reveal, roots = [directory, legacy
     }
     if (!includePublication) { view.contextKey = manual ? loadKey : contextKey; view.working = working; view.manual = manual }
     if (view.scope !== 'none') view.workspaceId = workspaceId
+    if (manual && loadFor && session && !excluded) {
+      const saved = manualBriefs.get(contextKey) ?? {}
+      saved[slot] = view
+      if (!includePublication) saved.source = current.source
+      manualBriefs.delete(contextKey)
+      manualBriefs.set(contextKey, saved)
+      if (manualBriefs.size > 12) manualBriefs.delete(manualBriefs.keys().next().value)
+    }
     if (!includePublication) selection = current
     return view
   }
@@ -260,6 +282,6 @@ export function bindSources(orca, { settings, reveal, roots = [directory, legacy
     const pane = current.agent?.paneKey ?? (current.selected?.tab && current.selected?.leaf ? `${current.selected.tab.replace(/^web-terminal-/u, '')}:${current.selected.leaf}` : null)
     if (pane && pane === event.paneKey) invalidate('session')
   })
-  function historyChanged() { completed.clear(); invalidate('history-setting') }
+  function historyChanged() { invalidate('history-setting') }
   return { focused, workflowFocused, recapTarget, recapSource, close, frame, stop, exclusions, historyChanged }
 }

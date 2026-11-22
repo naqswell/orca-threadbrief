@@ -7,10 +7,17 @@
   <link rel="stylesheet" href="./panel.css">
 </head>
 <body>
-  <button id="open-settings" type="button" aria-label="Settings" title="Settings" aria-haspopup="dialog">
-    <img id="panel-icon" src="./assets/session-summary.png" width="24" height="24" alt="" hidden>
-    <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 3 1-1h4l1 3 2 1 3-.5 2 3.5-2 2v2l2 2-2 3.5-3-.5-2 1-1 3h-4l-1-3-2-1-3 .5L2 15l2-2v-2L2 9l2-3.5 3 .5 2-1Z"/><circle cx="12" cy="12" r="3"/></svg>
-  </button>
+  <div id="reader-tools" role="group" aria-label="Brief controls">
+    <span id="agent-working" role="status" hidden>Agent working</span>
+    <button type="button" id="refresh-brief" title="Refresh brief" hidden>
+      <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7v5h-5"/><path d="M19.6 11a8 8 0 1 0-2 6.5"/></svg>
+      <span>Refresh</span>
+    </button>
+    <button id="open-settings" type="button" aria-label="Settings" title="Settings" aria-haspopup="dialog">
+      <img id="panel-icon" src="./assets/session-summary.png" width="24" height="24" alt="" hidden>
+      <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 3 1-1h4l1 3 2 1 3-.5 2 3.5-2 2v2l2 2-2 3.5-3-.5-2 1-1 3h-4l-1-3-2-1-3 .5L2 15l2-2v-2L2 9l2-3.5 3 .5 2-1Z"/><circle cx="12" cy="12" r="3"/></svg>
+    </button>
+  </div>
   <p id="status" role="status" aria-live="polite"></p>
   <p id="loading" class="muted" role="status">Loading summary…</p>
   <template id="manual-welcome">
@@ -22,16 +29,12 @@
         <path d="m18 19 7-4m-3 6 7-4" stroke-width="1.6"/>
       </svg>
       <h2>Catch up on this session</h2>
-      <p>Read the saved handoff or last reply.<br>No model call.</p>
+      <p>Read the saved brief or the agent’s last reply.</p>
     </div>
   </template>
   <div id="brief-content">
     <main aria-label="Summary" aria-busy="true" tabindex="0" hidden></main>
     <button id="manual-load" type="button" hidden>Load brief</button>
-  </div>
-  <div id="reader-tools">
-    <span id="agent-working" role="status" hidden>Agent working</span>
-    <button type="button" id="refresh-brief" aria-label="Refresh summary" hidden>Update available · Refresh</button>
   </div>
   <dialog id="settings-dialog" aria-labelledby="settings-title" closedby="any">
     <div class="dialog-heading"><h2 id="settings-title">Settings</h2><button id="close-settings" type="button" aria-label="Close settings" title="Close settings" autofocus><svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="m4 4 8 8m0-8-8 8"/></svg></button></div>
@@ -55,7 +58,7 @@
       <summary>Recap strategy and model <small id="recap-mode-label"></small></summary>
     <fieldset class="preference-group" disabled>
       <legend class="visually-hidden">Recap strategy</legend>
-      <label>Mode <select name="summaryStrategy"><option value="brief">Brief recap</option><option value="handoff">Detailed handoff</option><option value="instant">Instant · no model call</option></select></label>
+      <label>Mode <select name="summaryStrategy"><option value="brief">Brief recap</option><option value="handoff">Detailed handoff</option><option value="instant">Instant · existing text</option></select></label>
     </fieldset>
     <p id="strategy-hint"></p>
     <div id="recap-controls" hidden>

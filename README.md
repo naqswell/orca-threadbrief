@@ -1,17 +1,19 @@
 # Threadbrief for Orca
 
-Threadbrief puts the selected Orca session’s last finished reply in the sidebar. Switch tabs and the brief follows. If the agent starts another turn, you can keep reading the previous result. Opening the panel makes no model call.
+Threadbrief puts the selected Orca session’s last finished reply in the sidebar. Switch tabs and the brief follows. If the agent starts another turn, you can keep reading the previous result. To have a model write a new recap, preview the request and start a separate agent session.
 
 <picture>
   <source media="(prefers-reduced-motion: reduce)" srcset="assets/threadbrief-demo.png">
   <img src="assets/threadbrief-demo.gif" alt="Threadbrief shows the workshop notes from session history. Switching to Workshop invite shows its saved Goal, Done and Next. The handoff stays visible with an Agent working indicator during a new turn." width="960">
 </picture>
 
-**[Install](#install)** · [Try it with your first session](docs/getting-started.md) · [Compare recap strategies](docs/getting-started.md#choose-a-strategy-and-an-agent)
+**[Install](#install)** · [Install with an agent](AGENTS.md) · [Try it with your first session](docs/getting-started.md) · [Compare recap strategies](docs/getting-started.md#choose-a-strategy-and-an-agent)
 
 **Paired Orca servers:** install Threadbrief on the desktop that shows the panel. It reads the selected session from its own paired server and starts a recap there only after a preview. No plugin installation on the server is required. Report files, exclusions and workflow profiles do not sync between machines. [Paired setup and limitations](docs/getting-started.md#using-a-paired-orca-server).
 
 ## Install
+
+To hand installation to your agent, send: **“Install Threadbrief for my Orca desktop from https://github.com/naqswell/orca-threadbrief. Follow AGENTS.md, verify the panel opens, and keep my current settings.”**
 
 Requires Orca **1.4.268** or newer. Enable plugins under **Settings → Plugins**, then install from GitHub:
 
@@ -31,9 +33,9 @@ A folder installation uses `local.session-summary` instead. **If you already use
 
 ## Settings
 
-Click the gear beside the task title. **Brief recap** (default) asks for up to 90 words; **Detailed handoff** asks for up to 400. In **Recap strategy and model**, keep the agent’s default or pick a model from the [list reported by your agent](docs/configuration.md#let-an-agent-fill-the-model-picker). Check the agent, model, host and excerpt before starting. **Instant** only shows existing text. [Compare strategies and costs](docs/getting-started.md#choose-a-strategy-and-an-agent).
+Click the gear at the top of the panel. **Brief recap** (default) asks for up to 90 words; **Detailed handoff** asks for up to 400. In **Recap strategy and model**, keep the agent’s default or pick a model from the [list reported by your agent](docs/configuration.md#let-an-agent-fill-the-model-picker). Check the agent, model, host and excerpt before starting. **Instant** only shows existing text. [Compare strategies and costs](docs/getting-started.md#choose-a-strategy-and-an-agent).
 
-Prefer to load a brief yourself? Turn on **Load briefs only on click**. Select a session and click **Load brief**. The result stays unchanged until you click **Refresh brief**. Neither button calls a model.
+Prefer to load a brief yourself? Turn on **Load briefs only on click**. Click **Load brief** once, switch sessions, and return to the version you read. Use **Refresh** in the top bar to reread the report or latest reply.
 
 **Configuring Threadbrief from an agent or terminal?** [Set preferences, choose a model, manage exclusions and profiles with JSON](docs/configuration.md). No developer mode or GUI automation required.
 

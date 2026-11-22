@@ -14,7 +14,9 @@ No formatting prompt is required. Plain text keeps its line breaks. Markdown rep
 
 ### Load a brief only when you need it
 
-Turn on **Load briefs only on click** at the top of the gear menu, or in Orca’s settings for Threadbrief. Opening the panel or switching sessions only identifies the selection; it does not read saved reports or conversation history. Click **Load brief** for the selected session. Later replies do not replace it until you click **Refresh brief**. Selecting a different session clears the previous brief. New worktrees do not auto-open the panel in this mode. An agent can [apply the same preference using JSON](configuration.md).
+Turn on **Load briefs only on click** in the gear menu or Orca’s settings for Threadbrief. Select a session and click **Load brief**. When you leave and come back, Threadbrief restores what you last read, even if the agent has since replied. **Refresh**, pinned beside the gear, fetches the latest version. Expand a before/after pair to load its images.
+
+The worker remembers the last 12 manually loaded sessions in memory, separately for each workspace and source host. Returning does not reread reports or conversation history. Restarting the worker, changing the history or load settings, or editing exclusions clears the remembered briefs. New worktrees do not auto-open in this mode. [Set this preference from an agent](configuration.md).
 
 These buttons display existing material, including on a paired server. To ask a model for a new recap, use the preview and start buttons below. Turn off **Load briefs only on click** to resume automatic updates.
 
@@ -103,7 +105,7 @@ Skip this if history is enough. Use a saved report for a stable handoff or when 
 | The panel asks you to select an agent tab | Select the conversation itself, not a file, empty shell, or browser tab. In a split terminal, select the pane with the agent. |
 | **Loading summary…** | The panel is fetching its first brief. After that, switching sessions keeps the previous brief visible until the next one is ready, with no loading animation. |
 | **Agent working** | You can keep reading this session’s last completed reply or saved report. The unfinished turn is not a summary. If there is no previous result, the panel waits for the first one. |
-| **Update available · Refresh** | You were reading when the same session changed. Your selection and scroll position stay put until you choose **Refresh**. Switching sessions follows the new selection; turning off history or excluding it clears the old view immediately. |
+| **Update available** | You were reading when the same session changed. Click **Update available** in the top bar to read the new version. Switching sessions follows the new selection; turning off history or excluding it clears the old view immediately. |
 | You prefer a live view even while reading | Turn off **Pause updates while reading** in the gear under **Panel**, or in Orca’s plugin settings. Any pending result appears immediately; future updates no longer wait for **Refresh**. This does not start a model. |
 | The agent finished, but there is no history reply | Check **Use the agent’s last reply**. Ask for a short recap in the same tab. If Orca has no readable history for this session, use a saved report. |
 | A paired session has no reply | Check the paired connection, both history preferences and whether the agent finished. If the server does not expose that transcript, use a saved report. |

@@ -12,16 +12,20 @@ async function exercisePanel(defaults) {
   const $ = s => document.querySelector(s), delay = ms => new Promise(r => setTimeout(r, ms))
   const events = {}, prefs = { ...defaults }
   const summary = title => ({ title, contextKey: title, scope: 'session', outcome: title + ' outcome' })
-  let inventories = 0
+  const loaded = new Map()
+  let inventories = 0, frameReads = 0
   let first, view = new Promise(resolve => { first = resolve })
   window.orca = {
     plugin: { on: (k, fn) => { events[k] = fn }, request: async (k, input) => {
       if (k === 'summary.focused') {
         if (!prefs.manualLoad) return view
-        if (!input.loadFor) return { manual: true, scope: 'manual', contextKey: view.contextKey }
+        if (!input.loadFor) return loaded.get(view.contextKey) ?? { manual: true, scope: 'manual', contextKey: view.contextKey }
         if (input.loadFor !== view.contextKey) throw Error('Wrong manual request')
-        return { ...view, manual: true }
+        const brief = { ...view, manual: true }
+        loaded.set(view.contextKey, brief)
+        return brief
       }
+      if (k === 'frame') { frameReads++; return null }
       if (k === 'workflow.view') return { state: 'none' }
       if (k === 'recap.agents') { inventories++; return [{ id: 'a', name: 'Agent A', preferred: true, catalogKey:'catalog-a' }, { id: 'b', name: 'Agent B', catalogKey:'catalog-b' }] }
       if (k === 'recap.preview') return { token: 'preview-a', title: 'Third', agent: 'a', model: prefs.recapModel, environment: 'local', prompt: 'Approved for Agent A' }
@@ -96,7 +100,8 @@ async function exercisePanel(defaults) {
   const text = $('main .prose p').firstChild, range = document.createRange()
   range.selectNodeContents(text); getSelection().removeAllRanges(); getSelection().addRange(range)
   view = { ...summary('Third'), outcome: 'Updated outcome' }; changed('session'); await delay(5)
-  check(!$('#refresh-brief').hidden && getSelection().toString() === 'Third outcome' && $('main .prose p').firstChild === text, 'Same-session refresh disturbed the reader')
+  const refresh = $('#refresh-brief')
+  check(refresh.innerText === 'Update available' && getSelection().toString() === 'Third outcome' && $('main .prose p').firstChild === text, 'Same-session refresh disturbed the reader')
   prefs.pauseWhileReading = false; events.settings({ key: 'pauseWhileReading' }); await delay(5)
   check($('main .prose p').textContent === 'Updated outcome', 'Live mode did not apply the pending update')
   view = { scope: 'excluded', excluded: 'session' }; changed('exclusions')
@@ -106,24 +111,38 @@ async function exercisePanel(defaults) {
   $('#close-settings').click()
   view = summary('On demand'); changed('history-setting'); await delay(5)
   const load = $('#manual-load')
-  check(prefs.manualLoad && !load.hidden && load.textContent === 'Load brief' && !$('main .prose'), 'Manual mode read a brief before a click')
+  check(prefs.manualLoad && !load.hidden && refresh.hidden && !$('main .prose'), 'Manual mode offered refresh or read a brief before a click')
   const heading = $('.manual-welcome h2').getBoundingClientRect(), action = load.getBoundingClientRect()
   check(heading.top > innerHeight / 4 && action.top > heading.bottom && action.bottom < innerHeight, 'On-demand action was not grouped in the tall panel')
   window.frameElement.height = '230'
   check(load.getBoundingClientRect().bottom <= innerHeight && !$('.manual-welcome svg').getClientRects().length, 'Short panel pushed the action below the fold')
   window.frameElement.height = '650'
+  view = { ...view, outcome: Array.from({ length: 65 }, (_, i) => `Paragraph ${i + 1}`).join('\n\n') }
   load.click(); await delay(5)
   const paragraph = $('main .prose p')
-  check(paragraph?.textContent === view.outcome && load.textContent === 'Refresh brief', 'Click did not load the selected brief')
+  check(paragraph?.textContent === 'Paragraph 1' && load.hidden && !refresh.hidden, 'Loading did not replace the initial action with Refresh')
   check(!$('.manual-welcome') && $('main h1').getBoundingClientRect().top < 60, 'Loaded brief retained the empty layout')
-  view = { ...view, outcome: 'Changed on host' }; changed('session'); await delay(5)
-  check($('main .prose p') === paragraph && paragraph.textContent !== view.outcome, 'Background update replaced a manual brief')
-  load.click(); await delay(5)
-  check($('main .prose p').textContent === view.outcome, 'Explicit refresh did not fetch the latest reply')
+  window.scrollTo(0, 800)
+  const bounds = refresh.getBoundingClientRect(), y = window.scrollY
+  check(y > 500 && bounds.top >= 0 && bounds.bottom < 60 && refresh.contains(document.elementFromPoint(bounds.x + 8, bounds.y + 8)), 'Refresh scrolled away or was covered')
+  view = { ...view, outcome: view.outcome.replace('Paragraph 1', 'Changed on host') }; changed('session'); await delay(5)
+  check($('main .prose p') === paragraph && !refresh.hidden, 'Background update disturbed the manual brief or hid Refresh')
+  refresh.click(); await delay(5)
+  check($('main .prose p').textContent === 'Changed on host' && window.scrollY === y, 'Explicit refresh did not update in place')
   view = summary('Another session'); changed('selection')
   check(!document.body.innerText.includes('Changed on host'), 'Previous session remained visible')
   await delay(5)
-  check(load.textContent === 'Load brief' && !$('main .prose'), 'Switched session loaded without a click')
+  check(!load.hidden && refresh.hidden && !$('main .prose'), 'Switched session loaded without a click')
+  view = summary('On demand'); changed('selection'); await delay(5)
+  check(load.hidden && !refresh.hidden && $('main .prose p')?.textContent === 'Changed on host', 'Returning to a loaded session showed the welcome instead of its last read')
+  view = { ...view, outcome: null, summary: { result: { pairs: [{ title: 'Example pair', before: 'a', after: 'b' }] } } }
+  refresh.click(); await delay(5)
+  view = summary('Another session'); changed('selection'); await delay(5)
+  view = summary('On demand'); changed('selection'); await delay(5)
+  const pair = $('main details')
+  check(pair && !pair.open && frameReads === 0, 'Restoring a manual report reread its images')
+  pair.querySelector('summary').click(); await delay(20)
+  check(frameReads === 2, 'Expanding the pair did not fetch its images')
 }
 
 const chrome = [process.env.CHROME_PATH, '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', '/usr/bin/google-chrome', '/usr/bin/chromium', process.env.ProgramFiles && join(process.env.ProgramFiles, 'Google/Chrome/Application/chrome.exe')].find(p => p && existsSync(p))

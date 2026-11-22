@@ -15,7 +15,7 @@ async function fixture(t) {
   const roots = { *[Symbol.iterator]() { state.snapshots++; yield root } }
   const command = async args => {
     if (args[1] === 'list') return { agents: [{ kind: 'terminal', paneKey: 'tab:leaf', orcaSessionId: state.session, state: 'done', title: 'Same name' }] }
-    if (args[1] === 'read') { state.history++; return { orcaSessionId: state.session, entries: [] } }
+    if (args[1] === 'read') { state.history++; return { orcaSessionId: state.session, entries: state.reply ? [{ role: 'assistant', kind: 'message', text: state.reply }] : [] } }
   }
   const restart = () => {
     const api = bindSources(orca, { roots, settings: async () => ({ autoOpen: true, manualLoad: state.manual }), focus: async () => ({ workspace: state.id, host: state.host, tab: 'tab', leaf: 'leaf', kind: 'terminal' }), command, reveal: async () => { state.reveals++ } })
@@ -57,7 +57,7 @@ test('manual briefs do not touch reports or history until requested for the curr
   assert.equal((await api.focused(input)).summary.goal, 'Shared')
   const before = [state.snapshots, state.history]
   assert.ok(before.every(n => n > 0))
-  assert.equal((await api.focused()).scope, 'manual')
+  assert.equal((await api.focused()).summary.goal, 'Shared')
   state.id = 'identity:wt2:local:other'
   await assert.rejects(api.focused(input), /selection changed/)
   await assert.rejects(api.workflowFocused(input), /selection changed/)
@@ -67,6 +67,37 @@ test('manual briefs do not touch reports or history until requested for the curr
   const next = await api.focused()
   assert.equal((await api.focused({ loadFor: next.contextKey })).scope, 'excluded')
   assert.deepEqual([state.snapshots, state.history], before)
+})
+
+test('on-demand A → B → A restores the last explicit read, not the latest history or a reused pane', async t => {
+  const { state, api } = await fixture(t)
+  state.manual = true
+  const counts = () => [state.snapshots, state.history]
+  const load = async () => api.focused({ loadFor: (await api.focused()).contextKey })
+  state.reply = 'First reply'
+  assert.equal((await load()).outcome, 'First reply')
+  const first = counts()
+  state.session = 'b'
+  assert.equal((await api.focused()).scope, 'manual')
+  assert.deepEqual(counts(), first)
+  state.reply = 'Different session'
+  assert.equal((await load()).outcome, 'Different session')
+  const both = counts()
+  state.session = 'a'
+  state.reply = 'Newer reply'
+  assert.equal((await api.focused()).outcome, 'First reply')
+  assert.deepEqual(counts(), both)
+  assert.equal((await load()).outcome, 'Newer reply')
+  const refreshed = counts()
+  const target = (await api.exclusions.list()).choices.find(r => r.kind === 'session')
+  await api.exclusions.set({ ...target, excluded: true })
+  assert.equal((await api.focused()).outcome, undefined)
+  await api.exclusions.set({ ...target, excluded: false })
+  assert.equal((await api.focused()).scope, 'manual')
+  assert.deepEqual(counts(), refreshed)
+  await load()
+  api.historyChanged()
+  assert.equal((await api.focused()).scope, 'manual')
 })
 
 test('overlapping exclusions survive restart, apply to future workspaces, and are not matched by display name', async t => {

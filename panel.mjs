@@ -159,11 +159,17 @@ function drawSummary(view, workflow) {
       if (result.noPair) renderMarkdown(node('p', undefined, gallery), result.noPair, openProseLink, true)
       for (const pair of result.pairs || []) {
         const details = node('details', undefined, gallery)
-        details.open = true
+        details.open = !view.manual
         node('summary', pair.title, details)
         node('small', 'Select an image to toggle full size.', details)
-        void showFrame(details, 'Before', pair.title, view.workspaceId, pair.before)
-        void showFrame(details, 'After', pair.title, view.workspaceId, pair.after)
+        const loadImages = () => {
+          if (!details.open) return
+          details.removeEventListener('toggle', loadImages)
+          void showFrame(details, 'Before', pair.title, view.workspaceId, pair.before)
+          void showFrame(details, 'After', pair.title, view.workspaceId, pair.after)
+        }
+        if (details.open) loadImages()
+        else details.addEventListener('toggle', loadImages)
       }
     }
   }
@@ -262,21 +268,28 @@ main.addEventListener('wheel', () => { pointerReading = true }, { passive: true 
 main.addEventListener('pointerdown', () => { pointerReading = true })
 main.addEventListener('pointerleave', () => { pointerReading = false })
 const reading = () => document.hasFocus() || pointerReading || !window.getSelection()?.isCollapsed
-const holdUpdate = () => pauseWhileReading && hasBrief && (reading() || !refreshBrief.hidden)
+const holdUpdate = () => pauseWhileReading && hasBrief && (reading() || refreshBrief.hasAttribute('data-pending'))
+function pendingUpdate(pending) {
+  if (refreshBrief.hasAttribute('data-pending') === pending) return
+  refreshBrief.toggleAttribute('data-pending', pending)
+  refreshBrief.querySelector('span').textContent = pending ? 'Update available' : 'Refresh'
+  refreshBrief.title = pending ? 'Refresh brief to read the update' : 'Refresh brief'
+}
 function resetReader() {
   manualKey = undefined
   manualLoad.hidden = true
   displayedContext = undefined
   hasBrief = pointerReading = false
   activity.hidden = refreshBrief.hidden = true
+  pendingUpdate(false)
 }
 refreshBrief.addEventListener('click', async () => {
   const before = window.scrollY, context = displayedContext
-  await refresh(false, true)
-  if (context === displayedContext && refreshBrief.hidden) {
-    main.focus({ preventScroll: true })
-    window.scrollTo(0, before)
-  }
+  refreshBrief.disabled = true
+  try {
+    await refresh(false, true, manualKey)
+    if (context === displayedContext) window.scrollTo(0, before)
+  } finally { refreshBrief.disabled = false }
 })
 async function refresh(leaving = false, apply = true, loadFor) {
   if (document.hidden) return
@@ -299,9 +312,9 @@ async function refresh(leaving = false, apply = true, loadFor) {
     if (ticket !== generation || document.hidden) return
     const { working, contextKey, ...view } = result
     manualKey = view.manual ? contextKey : undefined
-    manualLoad.hidden = !manualKey
-    if (view.scope === 'manual' && manualKey === displayedContext && rendered !== undefined) return
-    manualLoad.textContent = view.scope === 'manual' ? 'Load brief' : 'Refresh brief'
+    const welcome = view.scope === 'manual'
+    manualLoad.hidden = !welcome || !manualKey
+    refreshBrief.hidden = welcome || view.scope === 'excluded' || (view.scope === 'none' && !manualKey)
     activity.hidden = !working || view.manual
     sourceHint = working && !view.manual ? 'Choose an agent now. Preview is available when this turn finishes.' :
       view.scope === 'excluded' ? 'Summaries are off for this selection.' :
@@ -309,12 +322,12 @@ async function refresh(leaving = false, apply = true, loadFor) {
       view.scope === 'none' ? 'Select a finished agent conversation to preview a recap.' : ''
     updatePreviewControl()
     const key = JSON.stringify([view, workflow, workflowResult.error?.message, original?.key && dirtyDrafts.has(original.key)])
-    if (key === rendered && contextKey === displayedContext) { refreshBrief.hidden = true; return }
+    if (key === rendered && contextKey === displayedContext) { pendingUpdate(false); return }
     if (!apply && !leaving && displayedContext === contextKey && view.scope !== 'excluded' && holdUpdate()) {
-      refreshBrief.hidden = false
+      pendingUpdate(true)
       return
     }
-    refreshBrief.hidden = true
+    pendingUpdate(false)
     displayedContext = contextKey
     hasBrief = Boolean(view.summary || view.outcome)
     const editor = main.querySelector('details[data-draft-key]')
@@ -328,7 +341,7 @@ async function refresh(leaving = false, apply = true, loadFor) {
     if (nextEditor?.dataset.draftKey === openKey) nextEditor.open = true
   } catch (error) {
     if (ticket !== generation || document.hidden) return
-    if (!leaving && !apply && holdUpdate()) { refreshBrief.hidden = false; return }
+    if (!leaving && !apply && holdUpdate()) { pendingUpdate(true); return }
     rendered = undefined
     main.replaceChildren()
     node('p', message(error, 'Could not load summary.'), main)
