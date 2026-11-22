@@ -47,6 +47,8 @@ async function exercisePanel(defaults) {
   await import('/panel.mjs')
   await delay(370)
   const initial = $('#loading').getBoundingClientRect()
+  const canSave = () => $('#open-handoff').getClientRects().length > 0
+  check(!canSave(), 'Save offered before the first brief loaded')
   check(initial.height > 0 && initial.height < 60 && !document.getAnimations().length && $('#loading').textContent.trim() === 'Loading summary…', 'First load was not a static, single-line status')
   first(summary('First'))
   await delay(10)
@@ -56,6 +58,7 @@ async function exercisePanel(defaults) {
   changed('selection')
   await delay(370)
   check($('main h1')?.textContent === 'First' && !$('main').hidden && $('main').inert, 'Old brief disappeared or stayed actionable during a slow switch')
+  check(!canSave(), 'Save targeted a session that was still switching')
   check(!$('#loading').getClientRects().length && !document.getAnimations().length, 'Loader or animation appeared during a slow switch')
   view = { ...summary('Third'), working: true }; changed('selection'); await delay(5)
   check($('main h1')?.textContent === 'Third' && !$('main').inert && !document.getAnimations().length, 'New selection did not replace the old brief directly')
@@ -129,6 +132,7 @@ async function exercisePanel(defaults) {
   view = summary('On demand'); changed('history-setting'); await delay(5)
   const load = $('#manual-load')
   check(prefs.manualLoad && !load.hidden && refresh.hidden && !$('main .prose'), 'Manual mode offered refresh or read a brief before a click')
+  check(!canSave(), 'Save was visible before Load brief')
   const heading = $('.manual-welcome h2').getBoundingClientRect(), action = load.getBoundingClientRect()
   check(heading.top > innerHeight / 4 && action.top > heading.bottom && action.bottom < innerHeight, 'On-demand action was not grouped in the tall panel')
   window.frameElement.height = '230'
@@ -138,6 +142,7 @@ async function exercisePanel(defaults) {
   load.click(); await delay(5)
   const paragraph = $('main .prose p')
   check(paragraph?.textContent === 'Paragraph 1' && load.hidden && !refresh.hidden, 'Loading did not replace the initial action with Refresh')
+  check(canSave(), 'Loading the session reply did not make Save available')
   check(!$('.manual-welcome') && $('main h1').getBoundingClientRect().top < 60, 'Loaded brief retained the empty layout')
   window.scrollTo(0, 800)
   const bounds = refresh.getBoundingClientRect(), y = window.scrollY
@@ -156,8 +161,10 @@ async function exercisePanel(defaults) {
   check(!document.body.innerText.includes('Changed on host'), 'Previous session remained visible')
   await delay(5)
   check(!load.hidden && refresh.hidden && !$('main .prose'), 'Switched session loaded without a click')
+  check(!canSave(), 'A new manual session kept the previous Save action')
   view = summary('On demand'); changed('selection'); await delay(5)
   check(load.hidden && !refresh.hidden && $('main .prose p')?.textContent === 'Changed on host', 'Returning to a loaded session showed the welcome instead of its last read')
+  check(canSave(), 'Restoring the session reply lost Save')
   view = { ...view, outcome: null, summary: { result: { pairs: [{ title: 'Example pair', before: 'a', after: 'b' }] } } }
   refresh.click(); await delay(5)
   view = summary('Another session'); changed('selection'); await delay(5)
@@ -166,6 +173,7 @@ async function exercisePanel(defaults) {
   check(pair && !pair.open && frameReads === 0, 'Restoring a manual report reread its images')
   pair.querySelector('summary').click(); await delay(20)
   check(frameReads === 2, 'Expanding the pair did not fetch its images')
+  view = summary('On demand'); refresh.click(); await delay(5)
   $('#open-handoff').click(); await delay(5)
   const handoff = $('#handoff-dialog')
   check(handoff.open && handoff.scrollWidth <= handoff.clientWidth && handoff.innerText.includes('normal tokens') && $('#checkpoint-target').textContent.includes('Paired server') && !checkpointSaves, 'Opening handoff hid costs, the target, or captured without consent')

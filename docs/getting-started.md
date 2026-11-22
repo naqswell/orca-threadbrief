@@ -24,8 +24,8 @@ These buttons display existing material, including on a paired server. To ask a 
 
 Use a checkpoint when one task spans many turns. Instead of asking another agent to reread a chat excerpt, ask the agent already doing the work to leave a handoff at a milestone.
 
-1. Open **Handoff → Copy instructions** in the panel. Copying reads no conversation and sends nothing. Paste into your next regular message in the **original** conversation. That message and the agent’s answer use its normal input and output tokens; Threadbrief cannot quote a price.
-2. When that turn finishes, click **Handoff → Save checkpoint** before another reply replaces it. Threadbrief checks the selected server and session, reads up to the 100 most recent entries through Orca, and saves only the block at the end of the latest assistant reply. This does not start an agent. The panel shows **Session handoff · checkpoint N**.
+1. Load the selected session’s brief first. **Save progress…** appears beside **Refresh** when you are reading an agent reply or a saved checkpoint. Choose **Copy instructions** and paste them into your next regular message in the **original** conversation. Copying sends nothing. That message and the agent’s answer use its normal input and output tokens.
+2. When that turn finishes, click **Save progress… → Save checkpoint** before another reply replaces it. Threadbrief checks the selected server and session, reads up to the 100 most recent entries through Orca, and saves only the block at the end of the latest assistant reply. This does not start an agent. The panel shows **Session handoff · checkpoint N**.
 3. At the next milestone, ask the same agent to update the checkpoint. Each revision is a **complete replacement**: it carries forward relevant decisions and evidence, not the whole transcript. Nothing runs between saves to maintain it. If the agent loses earlier context, use **Copy saved handoff** and paste the snapshot into your next turn.
 
 For agents: finish the reply with this fenced JSON block. Use the conversation’s language, one line of text per field (up to 480 characters). Start at revision 1 and increase it on each update. Use “None” for an empty field; do not invent missing history.
@@ -78,7 +78,7 @@ The panel shows the first available source, not a blend of conversations:
 | --- | --- |
 | **Saved for this session** | A report explicitly written for this Orca session. It wins even if there is a newer reply. |
 | **Session handoff · checkpoint N** | A snapshot written in the original conversation and saved by you. It does not change when the agent replies again. |
-| **Last agent reply** | The selected agent's last substantive reply, not a recap of the conversation. On by default for both local and paired sessions. |
+| **Last agent reply** | The selected agent’s latest substantive reply, not a recap. If the transcript has no usable reply yet, Threadbrief can use the last reply Orca reports for that same finished session. It never substitutes another session or server. |
 | **Shared with this worktree** | A saved report for the checkout. It can include other sessions' work; it isn't attributed to the selected agent. |
 
 Turning off **Use the agent’s last reply** disables history, including manual recap previews. It doesn't delete anything. No history is sent to an agent unless you confirm the preview.

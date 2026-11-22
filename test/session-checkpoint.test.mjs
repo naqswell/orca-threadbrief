@@ -20,7 +20,7 @@ async function setup(t) {
       calls.push(args)
       assert.deepEqual(args, ['agent','read','orca_session_id:same','--environment',state.environment,'--limit','100'])
       state.duringRead?.()
-      return {orcaSessionId:state.returnId ?? state.id, state:state.working ? 'working' : 'done', entries:state.entries}
+      return {orcaSessionId:state.returnId ?? state.id, state:state.working ? 'working' : state.noTranscriptState ? undefined : 'done', entries:state.entries}
     }
   })
   return { state, root, legacyRoot, calls, target:handlers['checkpoint.target'], capture:handlers['checkpoint.capture'], saved:(env = state.environment) => readSnapshot(root, ['sessions',env], sessionFilename(state.id)) }
@@ -44,6 +44,16 @@ test('checkpoint capture stays in the original local or paired session; newer sn
   }
   assert.equal((await f.saved('local')).done, 'Reserved local; sent invites')
   assert.equal((await f.saved('peer')).done, 'Reserved peer; sent invites')
+})
+
+test('a stateless transcript can save only the reply confirmed by the finished agent', async t => {
+  const f = await setup(t), target = await f.target(), reply = block(1, 'Seats confirmed')
+  Object.assign(f.state, {noTranscriptState:true, entries:[entry(reply)], lastAssistantMessage:'A different reply'})
+  await assert.rejects(f.capture(target))
+  assert.equal(await f.saved(), null)
+  f.state.lastAssistantMessage = reply
+  await f.capture(target)
+  assert.equal((await f.saved()).done, 'Seats confirmed')
 })
 
 test('unmarked, unfinished, excluded or changed session cannot write a checkpoint', async t => {

@@ -15,8 +15,8 @@ async function fixture(t) {
   const orca = { storage: { get: async k => memory.get(k), set: async (k, v) => memory.set(k, structuredClone(v)) }, host: { call: async name => name === 'workspace.readContext' ? { workspaceId: state.id } : { workspaces: [{ id: state.id, hostId: state.host, name: 'Same name', projectId: state.project, project: 'Same name' }] } }, events: { on: (k, cb) => { events[k] = cb } }, panels: { post() {} } }
   const roots = { *[Symbol.iterator]() { state.snapshots++; yield root } }
   const command = async args => {
-    if (args[1] === 'list') return { agents: [{ kind: 'terminal', paneKey: 'tab:leaf', orcaSessionId: state.session, state: 'done', title: 'Same name' }] }
-    if (args[1] === 'read') { state.history++; return { orcaSessionId: state.session, entries: state.reply ? [{ role: 'assistant', kind: 'message', text: state.reply }] : [] } }
+    if (args[1] === 'list') return { agents: [{ kind: 'terminal', paneKey: 'tab:leaf', orcaSessionId: state.session, state: state.liveState ?? 'done', lastAssistantMessage: state.statusReply, title: 'Same name' }] }
+    if (args[1] === 'read') { state.history++; return { orcaSessionId: state.historyId ?? state.session, state: state.transcriptState, entries: state.reply ? [{ role: 'assistant', kind: 'message', text: state.reply }] : [] } }
   }
   const restart = () => {
     const api = bindSources(orca, { roots, settings: async () => ({ autoOpen: true, manualLoad: state.manual }), focus: async () => ({ workspace: state.id, host: state.host, tab: 'tab', leaf: 'leaf', kind: 'terminal' }), command, reveal: async () => { state.reveals++ } })
@@ -99,6 +99,37 @@ test('on-demand A → B → A restores the last explicit read, not the latest hi
   await load()
   api.historyChanged()
   assert.equal((await api.focused()).scope, 'manual')
+})
+
+test('finished session can use its own reported reply when history lags, but not for another or unfinished turn', async t => {
+  const { state, api } = await fixture(t)
+  state.statusReply = 'The venue confirmed our reservation.'
+  assert.equal((await api.focused()).outcome, state.statusReply)
+  state.reply = 'The full reply from the transcript.'
+  assert.equal((await api.focused()).outcome, state.reply)
+  state.session = 'b'
+  state.historyId = 'a'
+  assert.equal((await api.focused()).outcome, undefined)
+  state.historyId = 'b'
+  state.transcriptState = 'working'
+  assert.equal((await api.focused()).outcome, undefined)
+  state.liveState = 'working'
+  assert.equal((await api.focused()).outcome, undefined)
+})
+
+test('returning to an empty manual load offers a fresh read without fetching history on its own', async t => {
+  const { state, api } = await fixture(t)
+  state.manual = true
+  const input = { loadFor:(await api.focused()).contextKey }
+  assert.equal((await api.focused(input)).emptyReason, 'noReply')
+  state.session = 'b'
+  await api.focused()
+  state.session = 'a'
+  state.reply = 'The completed answer is now available.'
+  const reads = state.history
+  assert.equal((await api.focused()).scope, 'manual')
+  assert.equal(state.history, reads)
+  assert.equal((await api.focused(input)).outcome, state.reply)
 })
 
 test('a host without a local agent namespace cannot restore or refresh a local brief', async t => {

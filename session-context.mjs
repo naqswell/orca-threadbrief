@@ -93,5 +93,5 @@ export async function focusedSession(contextId, focus, command = orcaJson) {
     matches = leaf ? found.agents.filter(agent => agent.kind === 'terminal' && agent.paneKey === `${terminalTab}:${leaf}`) : []
   } else return null
   const id = matches.length === 1 ? sessionId(matches[0].orcaSessionId) : null
-  return id ? { id, environment, title: matches[0].title, paneKey: matches[0].paneKey, state: matches[0].state, updatedAt: matches[0].updatedAt } : null
+  return id ? { id, environment, title: matches[0].title, paneKey: matches[0].paneKey, state: matches[0].state, updatedAt: matches[0].updatedAt, lastAssistantMessage: matches[0].lastAssistantMessage } : null
 }

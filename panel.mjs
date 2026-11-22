@@ -127,8 +127,8 @@ function drawSummary(view, workflow) {
       waiting: view.manual ? 'No completed reply yet. Refresh after this turn finishes.' : 'No completed reply yet. The first one will appear here when this turn finishes.',
       historyOff: 'No saved session report. Turn on “Use the agent’s last reply” to read its history.',
       pairedOff: 'Paired history is off. Enable it in Settings or save a session report.',
-      unavailable: 'Could not verify this session on its paired server. Check the connection or use a saved report.',
-      noReply: 'No reply is available from this session’s history yet. Ask the agent for a short recap.'
+      unavailable: 'Orca could not read this session’s history. Check the connection, then choose Refresh.',
+      noReply: 'No finished reply was available when this brief loaded. Choose Refresh to check again.'
     }
     node('p', hints[view.emptyReason] || 'Select an agent tab in Orca to see its summary.', main, 'empty-hint')
     button(main, 'How summaries work', () => openSettings(true)).className = 'guide-link'
@@ -261,6 +261,7 @@ function showLoading(leaving = false) {
     main.setAttribute('aria-busy', 'true')
     status.textContent = ''
   }
+  if (leaving) handoffControl.hidden = true
   if (leaving) main.inert = true
 }
 const activity = document.querySelector('#agent-working'), refreshBrief = document.querySelector('#refresh-brief')
@@ -286,6 +287,7 @@ function resetReader() {
   displayedContext = undefined
   hasBrief = pointerReading = false
   activity.hidden = refreshBrief.hidden = true
+  handoffControl.hidden = true
   pendingUpdate(false)
 }
 refreshBrief.addEventListener('click', async () => {
@@ -317,6 +319,7 @@ async function refresh(leaving = false, apply = true, loadFor) {
     const welcome = view.scope === 'manual'
     manualLoad.hidden = !welcome || !manualKey
     refreshBrief.hidden = welcome || view.scope === 'excluded' || (view.scope === 'none' && !manualKey)
+    handoffControl.hidden = view.scope !== 'session' || !(view.outcome || view.summary?.checkpoint)
     activity.hidden = !working || view.manual
     sourceHint = working && !view.manual ? 'Choose an agent now. Preview is available when this turn finishes.' :
       view.scope === 'excluded' ? 'Summaries are off for this selection.' :
@@ -345,6 +348,7 @@ async function refresh(leaving = false, apply = true, loadFor) {
     if (ticket !== generation || document.hidden) return
     if (!leaving && !apply && holdUpdate()) { pendingUpdate(true); return }
     rendered = undefined
+    handoffControl.hidden = true
     main.replaceChildren()
     node('p', message(error, 'Could not load summary.'), main)
   } finally {
@@ -711,10 +715,16 @@ function openSettings(showGuide = false) {
 document.querySelector('#open-settings').addEventListener('click', () => openSettings())
 const handoff = document.querySelector('#handoff-dialog'), checkpointStatus = document.querySelector('#checkpoint-status')
 const saveCheckpoint = document.querySelector('#save-checkpoint'), checkpointTarget = document.querySelector('#checkpoint-target')
+const handoffControl = document.querySelector('.handoff-control')
+const handoffButton = document.querySelector('#open-handoff'), handoffHint = document.querySelector('#handoff-hint')
+handoffButton.addEventListener('pointerenter', () => { handoffHint.hidden = false })
+handoffButton.addEventListener('focus', () => { handoffHint.hidden = false })
+document.addEventListener('keydown', event => { if (event.key === 'Escape') handoffHint.hidden = true })
 let handoffVisit = 0, checkpointKey
 handoff.addEventListener('close', () => { ++handoffVisit; checkpointKey = undefined })
 document.querySelector('#close-handoff').addEventListener('click', () => handoff.close())
-document.querySelector('#open-handoff').addEventListener('click', async () => {
+handoffButton.addEventListener('click', async () => {
+  handoffHint.hidden = true
   const visit = ++handoffVisit
   checkpointKey = undefined
   checkpointStatus.textContent = ''
@@ -727,7 +737,7 @@ document.querySelector('#open-handoff').addEventListener('click', async () => {
     checkpointKey = target.key
     checkpointTarget.textContent = `${target.title} · ${target.environment === 'local' ? 'This desktop' : 'Paired server'}`
     saveCheckpoint.disabled = false
-  } catch (error) { if (visit === handoffVisit) checkpointTarget.textContent = message(error, 'Select a finished session with history enabled, then reopen Handoff.') }
+  } catch (error) { if (visit === handoffVisit) checkpointTarget.textContent = message(error, 'Select a finished session with history enabled, then open Save progress again.') }
 })
 document.querySelector('#copy-checkpoint').addEventListener('click', event => run(event.currentTarget,
   () => copyText(document.querySelector('#checkpoint-prompt').textContent), 'Copied. Paste into the original conversation.', 'Could not copy.', checkpointStatus))

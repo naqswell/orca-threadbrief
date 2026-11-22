@@ -7,6 +7,11 @@ import { createExclusions } from './exclusions.mjs'
 const identity = id => typeof id === 'string' && id.startsWith('identity:wt2:')
 const focusKey = value => value && JSON.stringify([value.workspace, value.host, value.tab, value.leaf, value.kind, value.entity, value.sessionId])
 const acknowledgement = /^(?:(?:ok(?:ay)?|done|thanks|thank you|got it|yes|no|да|нет|ок|окей|понял[аи]?|готово|сделано|спасибо)[\s\p{P}]*)+$/iu
+function substantiveReply(text) {
+  const reply = typeof text === 'string' ? text.trim() : ''
+  if (!reply || (reply.length <= 96 && acknowledgement.test(reply))) return null
+  return reply.length > 1600 ? reply.slice(0, 1600).trimEnd() + '…' : reply
+}
 export function lastOutcome(history, id) {
   if (history?.orcaSessionId !== id || history.state === 'working' || !Array.isArray(history.entries)) return null
   return outcomeBefore(history.entries, history.entries.length)
@@ -15,8 +20,8 @@ function outcomeBefore(entries, end) {
   for (let i = end - 1; i >= 0; i--) {
     const entry = entries[i]
     if (entry.role !== 'assistant' || entry.kind !== 'message' || entry.tools?.length) continue
-    const reply = typeof entry.text === 'string' ? entry.text.trim() : ''
-    if (reply && (reply.length > 96 || !acknowledgement.test(reply))) return reply.length > 1600 ? reply.slice(0, 1600).trimEnd() + '…' : reply
+    const reply = substantiveReply(entry.text)
+    if (reply) return reply
   }
   return null
 }
@@ -81,7 +86,7 @@ export function bindSources(orca, { settings, reveal, roots = [directory, legacy
     const live = session?.environment && session.environment !== 'local' ? await remoteState(session, active.workspaceId) : session
     if (!session || !live || live.state !== 'done' || (session.environment === 'local' && selected.host && selected.host !== 'local')) throw Error('Select a finished agent on a connected Orca host.')
     await verifySelection(start, active.workspaceId, focusKey(selected))
-    return { id: session.id, environment: session.environment, worktree: selector(active.workspaceId), workspaceId: active.workspaceId, title: session.title, key: JSON.stringify([active.workspaceId, focusKey(selected), session.id, live.updatedAt]) }
+    return { id: session.id, environment: session.environment, worktree: selector(active.workspaceId), workspaceId: active.workspaceId, title: session.title, lastAssistantMessage: live.lastAssistantMessage, key: JSON.stringify([active.workspaceId, focusKey(selected), session.id, live.updatedAt]) }
   }
   function checkGeneration(start) {
     if (start !== generation) throw Error('The active selection changed.')
@@ -187,9 +192,10 @@ export function bindSources(orca, { settings, reveal, roots = [directory, legacy
           else if (working || live.state === 'done') {
             checkGeneration(start)
             const history = await command(['agent', 'read', `orca_session_id:${session.id}`, '--environment', session.environment, '--limit', '20']).catch(() => null)
-            const outcome = working ? previousOutcome(history, session.id) ?? completed.get(contextKey) : lastOutcome(history, session.id)
+            const statusReply = !working && (!history || (history.orcaSessionId === session.id && history.state !== 'working')) ? live.lastAssistantMessage : undefined
+            const outcome = working ? previousOutcome(history, session.id) ?? completed.get(contextKey) : lastOutcome(history, session.id) ?? substantiveReply(statusReply)
             if (outcome) view.outcome = outcome
-            else view.emptyReason = working ? 'waiting' : paired && !history ? 'unavailable' : 'noReply'
+            else view.emptyReason = working ? 'waiting' : !history ? 'unavailable' : 'noReply'
           } else view.emptyReason = 'noReply'
         }
       }
@@ -223,7 +229,7 @@ export function bindSources(orca, { settings, reveal, roots = [directory, legacy
     }
     if (!includePublication) { view.contextKey = manual ? loadKey : contextKey; view.working = working; view.manual = manual }
     if (view.scope !== 'none') view.workspaceId = workspaceId
-    if (manual && loadFor && !excluded && (session || view.scope === 'worktree')) {
+    if (manual && loadFor && !excluded && (view.summary || view.outcome)) {
       const saved = manualBriefs.get(contextKey) ?? {}
       saved[slot] = view
       if (!includePublication) saved.source = current.source
