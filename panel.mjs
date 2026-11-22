@@ -299,6 +299,7 @@ function showLoading(leaving = false) {
     status.textContent = ''
   }
   reloadFeedback.textContent = ''
+  refreshBrief.disabled = manualLoad.disabled = true
   if (leaving) main.inert = true
 }
 const activity = document.querySelector('#agent-working'), refreshBrief = document.querySelector('#refresh-brief')
@@ -327,18 +328,14 @@ function resetReader() {
   pendingUpdate(false)
 }
 refreshBrief.addEventListener('click', async () => {
-  refreshBrief.disabled = true
-  try {
-    const message = await refresh(false, true, manualKey)
-    if (message) reloadFeedback.textContent = message
-  }
-  finally { refreshBrief.disabled = false }
+  const message = await refresh(false, true, manualKey)
+  if (message) reloadFeedback.textContent = message
 })
 async function refresh(leaving = false, apply = true, loadFor) {
   if (document.hidden) return
+  if (!leaving && !apply && manualKey && manualLoad.disabled) return
   const ticket = ++generation
   showLoading(leaving)
-  if (loadFor) manualLoad.disabled = true
   listening = true
   const input = loadFor ? { loadFor } : {}
   let confirmed
@@ -402,6 +399,7 @@ async function refresh(leaving = false, apply = true, loadFor) {
   } finally {
     if (ticket === generation && !document.hidden) {
       setHandoffTarget(confirmed)
+      refreshBrief.disabled = false
       manualLoad.disabled = false
       loading.hidden = true
       main.inert = false

@@ -20,6 +20,8 @@ The worker remembers the last 12 manually loaded sessions in memory, separately 
 
 Creating or updating a report checks the selected session and saved revision first. If another report was saved since you last looked, the panel loads it instead of opening the creation dialog.
 
+In a newly opened agent tab, Load brief becomes available only after Orca identifies the session. Loading and reloading stay disabled until the current read finishes. If a different session takes over the same terminal pane, an old click cannot load its history.
+
 These buttons display existing material, including on a paired server. To ask a model for a new recap, use the preview and start buttons below. Turn off **Load briefs only on click** to resume automatic updates.
 
 ## Keep a running handoff in the same session

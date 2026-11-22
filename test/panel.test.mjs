@@ -186,7 +186,11 @@ async function exercisePanel(defaults) {
   check(load.getBoundingClientRect().bottom <= innerHeight && !$('.manual-welcome svg').getClientRects().length, 'Short panel pushed the action below the fold')
   window.frameElement.height = '650'
   view = { ...view, outcome: Array.from({ length: 65 }, (_, i) => `Paragraph ${i + 1}`).join('\n\n') }
-  load.click(); await delay(5)
+  waitForLoad = new Promise(resolve => { release = resolve })
+  load.click()
+  changed('settings'); await delay(5)
+  check(load.disabled || load.hidden, 'A background refresh re-enabled Load before the requested brief arrived')
+  release(); waitForLoad = undefined; await delay(5)
   const paragraph = $('main .prose p')
   check(paragraph?.textContent === 'Paragraph 1' && load.hidden && !refresh.hidden, 'Loading did not replace the initial action with Refresh')
   const beforeReload = reportRequests

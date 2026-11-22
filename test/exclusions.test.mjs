@@ -19,12 +19,12 @@ async function fixture(t) {
     if (args[1] === 'read') { state.history++; return { orcaSessionId: state.historyId ?? state.session, state: state.transcriptState, entries: state.reply ? [{ role: 'assistant', kind: 'message', text: state.reply }] : [] } }
   }
   const restart = () => {
-    const api = bindSources(orca, { roots, settings: async () => ({ autoOpen: true, manualLoad: state.manual }), focus: async () => ({ workspace: state.id, host: state.host, tab: 'tab', leaf: 'leaf', kind: 'terminal' }), command, reveal: async () => { state.reveals++ } })
+    const api = bindSources(orca, { roots, settings: async () => ({ autoOpen: true, manualLoad: state.manual }), focus: async () => ({ workspace: state.id, host: state.host, tab: 'tab', leaf: 'leaf', kind: 'terminal', ...state.focus }), command, reveal: async () => { state.reveals++ } })
     t.after(api.stop)
     return api
   }
   const save = (goal = 'Shared') => writeFile(join(root, filename(state.id)), JSON.stringify({ goal, done: 'Checked', next: 'None', links: {} }), { mode: 0o600 })
-  return { state, api: restart(), restart, save, created: () => events['workspace.created']({ kind: 'worktree', workspaceId: state.id }) }
+  return { state, api: restart(), restart, save, events, orca, created: () => events['workspace.created']({ kind: 'worktree', workspaceId: state.id }) }
 }
 
 test('session exclusion skips all report access, history, workflow, recap and auto-open; removal restores existing report', async t => {
@@ -68,6 +68,34 @@ test('manual briefs do not touch reports or history until requested for the curr
   const next = await api.focused()
   assert.equal((await api.focused({ loadFor: next.contextKey })).scope, 'excluded')
   assert.deepEqual([state.snapshots, state.history], before)
+})
+
+test('a manual click cannot load a newly attached agent through the previous selection', async t => {
+  const { state, api } = await fixture(t)
+  state.manual = true
+  const first = await api.focused()
+  state.session = 'b'
+  const reads = [state.snapshots, state.history]
+  await assert.rejects(api.focused({loadFor:first.contextKey}), /selection changed/)
+  await assert.rejects(api.workflowFocused({loadFor:first.contextKey}), /selection changed/)
+  assert.deepEqual([state.snapshots, state.history], reads)
+  assert.notEqual((await api.focused()).contextKey, first.contextKey)
+})
+
+test('a new agent tab offers no load action until Orca identifies its session', async t => {
+  const { state, api, events, orca } = await fixture(t)
+  state.manual = true
+  state.id = 'folder:new'
+  state.session = null
+  const before = await api.focused({listen:true})
+  assert.equal(before.contextKey, undefined)
+  state.session = 'agent-arrived'
+  const changed = new Promise(resolve => { orca.panels.post = (_, data) => resolve(data.reason) })
+  events['agent.status.changed']({workspaceId:state.id, paneKey:'tab:leaf'})
+  assert.equal(await changed, 'selection')
+  const ready = await api.focused()
+  assert.ok(ready.contextKey)
+  assert.deepEqual([state.snapshots, state.history], [0, 0])
 })
 
 test('on-demand A → B → A restores the last explicit read, not the latest history or a reused pane', async t => {

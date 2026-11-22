@@ -140,18 +140,19 @@ export function bindSources(orca, { settings, reveal, roots = [directory, legacy
     if (!workspaceId) return { scope: 'none', summary: null, manual }
     const selected = await getFocus(), key = focusKey(selected)
     const current = { start, key, files: new Set(), workspaceId, selected, source: null, agent: null, manual }
-    const loadKey = manual && selected ? JSON.stringify([workspaceId, key]) : undefined
+    const { session, excluded } = await exclusions.check({ active, selected }, () => resolve(active, selected))
+    current.agent = session
+    const loadKey = manual && selected && (session || !workspaceId.startsWith('folder:'))
+      ? JSON.stringify([workspaceId, key, session?.environment, session?.id]) : undefined
     const welcome = () => {
       if (!includePublication) selection = current
       return { scope: 'manual', manual, contextKey: loadKey }
     }
     if (manual) {
       checkGeneration(start)
-      if (loadFor && loadFor !== loadKey) throw Error('The active selection changed. Load the brief again.')
+      if (loadFor && (!loadKey || loadFor !== loadKey)) throw Error('The active selection changed. Load the brief again.')
       if (!loadFor && (!manualBriefs.size || !loadKey)) return welcome()
     }
-    const { session, excluded } = await exclusions.check({ active, selected }, () => resolve(active, selected))
-    current.agent = session
     const contextKey = JSON.stringify([workspaceId, session?.environment ?? selected?.host, session?.id ?? key])
     const slot = includePublication ? 'workflow' : 'panel'
     if (manual && !loadFor) {
@@ -296,10 +297,10 @@ export function bindSources(orca, { settings, reveal, roots = [directory, legacy
   })
   orca.events.on('agent.status.changed', event => {
     const current = selection ?? observedPane
-    if (current?.manual) return
+    if (current?.manual && current.agent) return
     if (!current || (event.workspaceId && event.workspaceId !== current.workspaceId && event.workspaceId !== current.selected?.workspace && event.workspaceListId !== current.workspaceId)) return
     const pane = current.agent?.paneKey ?? (current.selected?.tab && current.selected?.leaf ? `${current.selected.tab.replace(/^web-terminal-/u, '')}:${current.selected.leaf}` : null)
-    if (pane && pane === event.paneKey) invalidate('session')
+    if (pane && pane === event.paneKey) invalidate(current.manual ? 'selection' : 'session')
   })
   function historyChanged() { invalidate('history-setting') }
   return { focused, workflowFocused, recapTarget, recapSource, close, frame, stop, exclusions, historyChanged }
