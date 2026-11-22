@@ -30,15 +30,17 @@ export default function activate(orca) {
   orca.panels.handle('frame', sources.frame)
   orca.panels.handle('exclusions.list', sources.exclusions.list)
   orca.panels.handle('exclusions.set', sources.exclusions.set)
-  bindRecaps(orca, { settings, source: sources.recapSource, command: orcaJson })
+  const revokeRecap = bindRecaps(orca, { settings, source: sources.recapSource, command: orcaJson })
   const accept = bindProfiles(orca, { settings, focused: sources.workflowFocused })
-  const key = basename(dirname(dirname(fileURLToPath(import.meta.url))))
+  const pluginDir = dirname(dirname(fileURLToPath(import.meta.url)))
+  const key = basename(pluginDir), plugins = dirname(pluginDir)
   let stopImports, released = false
-  if (key.endsWith('.session-summary')) void inbox(key).then(dir => receive(dir, accept, text => orca.log(text))).then(stop => {
+  if (basename(plugins) === 'plugins' && key.endsWith('.session-summary')) void inbox(key, dirname(plugins)).then(dir => receive(dir, accept, text => orca.log(text))).then(stop => {
     if (released) stop(); else stopImports = stop
   }).catch(error => orca.log(error.message))
   const subscription = orca.settings.onDidChange(({ key }) => {
-    if (key === 'historyOutcome' || key === 'pairedHistory') orca.panels.post('summary.changed', { reason: 'history-setting' })
+    if (['historyOutcome', 'pairedHistory', 'summaryStrategy', 'recapAgent'].includes(key)) revokeRecap()
+    if (key === 'historyOutcome' || key === 'pairedHistory') sources.historyChanged()
     else if (key === 'profileActions' || key === 'commandAction') orca.panels.post('summary.changed', { reason: 'settings' })
   })
   // A status contribution keeps Orca's worker alive while it observes the active summary.

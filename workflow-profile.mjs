@@ -14,9 +14,10 @@ try {
     const path = await enqueue(await inbox(values.plugin), profile, !!values.enable)
     const exists = p => access(p).then(() => true, e => { if (e.code === 'ENOENT') return false; throw e })
     for (let i = 0; i < 50 && await exists(path); i++) await wait(100)
-    if (await exists(path + '.failed')) throw Error('Import rejected. Check the installed plugin’s logs.')
     const queued = await exists(path)
-    console.log(JSON.stringify({ status: queued ? 'queued' : 'applied', id: profile.id, enabled: !!values.enable, plugin: values.plugin }))
-    if (queued) process.exitCode = 2
+    if (!queued && await exists(path + '.failed')) throw Error('Import rejected. Check the installed plugin’s logs.')
+    const partial = !queued && await exists(path + '.saved')
+    console.log(JSON.stringify({ status: queued ? 'queued' : partial ? 'saved' : 'applied', id: profile.id, enabled: !!values.enable, plugin: values.plugin, ...(partial && { warning: 'Profile saved. Could not turn on Show profile commands; check Orca Settings.' }) }))
+    if (queued || partial) process.exitCode = 2
   }
 } catch (e) { console.error(e.message); process.exitCode = 1 }

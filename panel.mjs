@@ -235,32 +235,7 @@ function drawWorkflow(workflow, draftKey) {
   }
 }
 const loading = document.querySelector('#loading')
-const outgoing = document.querySelector('#outgoing')
-const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)')
-let draftFocus, loadTimer, loaderSince, oldMotion
-function clearOutgoing() {
-  oldMotion?.cancel()
-  oldMotion = undefined
-  outgoing.hidden = true
-  outgoing.replaceChildren()
-}
-function retire() {
-  if (main.hidden || !main.firstChild) return
-  clearOutgoing()
-  outgoing.append(...main.childNodes)
-  outgoing.hidden = false
-  main.hidden = true
-  rendered = undefined
-  if (!reducedMotion.matches) oldMotion = outgoing.animate([{ opacity: 1 }, { opacity: .48, filter: 'blur(3px)' }], { duration: 115, fill: 'forwards', easing: 'ease-out' })
-}
-function fadeOutgoing() {
-  if (outgoing.hidden) return
-  if (reducedMotion.matches) { clearOutgoing(); return }
-  const { opacity, filter } = getComputedStyle(outgoing)
-  oldMotion?.cancel()
-  oldMotion = outgoing.animate([{ opacity, filter }, { opacity: 0, filter: 'blur(4px)' }], { duration: 145, fill: 'forwards', easing: 'ease-out' })
-  oldMotion.onfinish = clearOutgoing
-}
+let draftFocus
 function showLoading(leaving = false) {
   if (main.getAttribute('aria-busy') !== 'true') {
     const field = document.activeElement
@@ -270,15 +245,7 @@ function showLoading(leaving = false) {
     main.setAttribute('aria-busy', 'true')
     status.textContent = ''
   }
-  if (leaving) retire()
-  if (main.hidden && loaderSince === undefined && loadTimer === undefined) {
-    loadTimer = setTimeout(() => {
-      loadTimer = undefined
-      loaderSince = performance.now()
-      loading.setAttribute('aria-hidden', 'false')
-      fadeOutgoing()
-    }, 150)
-  }
+  if (leaving) main.inert = true
 }
 const activity = document.querySelector('#agent-working'), refreshBrief = document.querySelector('#refresh-brief')
 let displayedContext, hasBrief = false, pointerReading = false
@@ -321,7 +288,7 @@ async function refresh(leaving = false, apply = true) {
     const { working, contextKey, ...view } = result
     activity.hidden = !working
     const key = JSON.stringify([view, workflow, workflowResult.error?.message, original?.key && dirtyDrafts.has(original.key)])
-    if (key === rendered) { refreshBrief.hidden = true; return }
+    if (key === rendered && contextKey === displayedContext) { refreshBrief.hidden = true; return }
     if (!apply && !leaving && displayedContext === contextKey && view.scope !== 'excluded' && holdUpdate()) {
       refreshBrief.hidden = false
       return
@@ -331,7 +298,6 @@ async function refresh(leaving = false, apply = true) {
     hasBrief = Boolean(view.summary || view.outcome)
     const editor = main.querySelector('details[data-draft-key]')
     const openKey = editor?.open ? editor.dataset.draftKey : null
-    if (!main.hidden && !openKey) retire()
     rendered = key
     main.replaceChildren()
     drawSummary(view, workflow)
@@ -347,22 +313,10 @@ async function refresh(leaving = false, apply = true) {
     node('p', message(error, 'Could not load summary.'), main)
   } finally {
     if (ticket === generation && !document.hidden) {
-      clearTimeout(loadTimer)
-      loadTimer = undefined
-      if (loaderSince !== undefined) {
-        const hold = 220 - (performance.now() - loaderSince)
-        if (hold > 0) await new Promise(resolve => setTimeout(resolve, hold))
-        if (ticket !== generation || document.hidden) return
-      }
-      loaderSince = undefined
+      loading.hidden = true
       main.inert = false
       main.setAttribute('aria-busy', 'false')
-      if (main.hidden) {
-        main.hidden = false
-        if (!reducedMotion.matches) main.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 145, easing: 'ease-out' })
-      }
-      loading.setAttribute('aria-hidden', 'true')
-      fadeOutgoing()
+      main.hidden = false
       if (draftFocus && document.activeElement === document.body) {
         const editor = main.querySelector('details[data-draft-key]')
         if (editor?.dataset.draftKey === draftFocus.key) {
@@ -378,12 +332,9 @@ async function refresh(leaving = false, apply = true) {
 }
 function pause() {
   generation++
-  clearTimeout(loadTimer)
-  loadTimer = undefined
-  retire()
+  main.inert = true
+  main.hidden = true
   resetReader()
-  loaderSince = undefined
-  loading.setAttribute('aria-hidden', 'true')
   main.setAttribute('aria-busy', 'true')
   if (listening) { listening = false; void request('summary.closed').catch(() => {}) }
 }
@@ -391,10 +342,10 @@ api.plugin.on('summary.changed', ({ reason } = {}) => {
   const privateChange = reason === 'exclusions' || reason === 'history-setting'
   const leaving = reason === 'workspace' || reason === 'selection' || privateChange
   if (leaving) resetReader()
-  if (privateChange) { main.replaceChildren(); main.hidden = true; rendered = undefined; clearOutgoing() }
+  if (privateChange) { main.replaceChildren(); main.hidden = true; rendered = undefined }
   if (leaving || reason === 'session' || reason === 'settings') clearRecap()
   void refresh(leaving, false)
-  if (leaving && dialog.open) void loadPreferences()
+  if (dialog.open && (leaving || reason === 'session')) void loadPreferences()
   if (dialog.open && exclusionsPanel.open && (leaving || reason === 'session')) void loadExclusions()
 })
 document.addEventListener('visibilitychange', () => { if (document.hidden) pause(); else void refresh() })
@@ -564,7 +515,10 @@ dialog.addEventListener('change', async ({ target }) => {
     await loadPreferences()
   }
 })
-api.settings.onDidChange(({ key }) => { if (dialog.open || key === 'showPanelIcon' || key === 'pauseWhileReading') void loadPreferences() })
+api.settings.onDidChange(({ key }) => {
+  if (key === 'recapAgent') clearRecap()
+  if (dialog.open || key === 'showPanelIcon' || key === 'pauseWhileReading') void loadPreferences()
+})
 const exclusionsPanel = document.querySelector('#exclusions')
 const exclusionStatus = document.querySelector('#exclusion-status')
 let rulesRevision = 0

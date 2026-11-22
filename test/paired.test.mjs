@@ -41,3 +41,36 @@ test('paired history and generation target only the confirmed peer; disconnect, 
   await assert.rejects(handlers['recap.agents'](), /off/)
   assert.deepEqual(calls, [])
 })
+
+test('changing selection, strategy or history access during a paired lookup cancels the pending operation', async t => {
+  const workspaceId = 'folder:sample', handlers = {}
+  let leaf = 'first', strategy = 'brief', allowed = true, duringLookup = () => {}, launches = 0, reads = 0
+  const focus = async () => ({ workspace: workspaceId, host: 'runtime:peer', tab: 'web-terminal-main', leaf, kind: 'terminal', sessionId: leaf })
+  const orca = { host: { call: async () => ({ workspaceId }) }, panels: { handle: (k, fn) => { handlers[k] = fn } }, events: { on() {} }, storage: { get: async () => [] } }
+  const command = async ([, op]) => {
+    if (op === 'list') {
+      const agent = { paneKey: `main:${leaf}`, orcaSessionId: leaf, state: 'done' }
+      duringLookup()
+      return { agents: [agent] }
+    }
+    if (op === 'installed') return { agents: [{ id: 'writer' }] }
+    if (op === 'read') { reads++; return { orcaSessionId: leaf, state: 'done', entries: [{ role: 'user', kind: 'message', text: 'First context' }] } }
+    if (op === 'launch') launches++
+  }
+  const settings = async () => ({ summaryStrategy: strategy, pairedHistory: allowed })
+  const sources = bindSources(orca, { settings, command, focus, roots: [] })
+  t.after(sources.stop)
+  bindRecaps(orca, { settings, command, source: sources.recapSource })
+  const preview = await handlers['recap.preview']({ agent: 'writer' })
+  duringLookup = () => { leaf = 'second' }
+  await assert.rejects(handlers['recap.start'](preview), /selection changed/)
+  duringLookup = () => {}
+  const next = await handlers['recap.preview']({ agent: 'writer' })
+  duringLookup = () => { strategy = 'instant' }
+  await assert.rejects(handlers['recap.start'](next), /Select Brief/)
+  const before = reads
+  duringLookup = () => { allowed = false; sources.historyChanged() }
+  await assert.rejects(sources.focused(), /selection changed/)
+  assert.equal(reads, before)
+  assert.equal(launches, 0)
+})

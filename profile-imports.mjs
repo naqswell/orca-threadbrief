@@ -2,13 +2,13 @@ import { constants, watch } from 'node:fs'
 import { lstat, mkdir, open, readdir, rename, unlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
-import { directory } from './store.mjs'
+import { orcaDataPath } from './session-context.mjs'
 
 const ticket = /^\d+-[0-9a-f-]{36}\.json$/u
-export async function inbox(key, base = directory) {
+export async function inbox(key, base = orcaDataPath()) {
   if (typeof key !== 'string' || !/^[a-z0-9][a-z0-9-]*\.session-summary$/u.test(key)) throw Error('Expected the installed Threadbrief plugin key, for example local.session-summary.')
   let path = base
-  for (const part of ['', 'profile-imports', key]) {
+  for (const part of ['threadbrief-profile-imports', key]) {
     path = join(path, part)
     try { await mkdir(path, { mode: 0o700 }) } catch (e) { if (e.code !== 'EEXIST') throw e }
     const s = await lstat(path)
@@ -38,12 +38,12 @@ export async function receive(dir, accept, log) {
           job = JSON.parse(await file.readFile('utf8'))
         } finally { await file.close() }
         if (typeof job.enable !== 'boolean') throw Error('Invalid enable flag.')
-        await accept(job.profile, job.enable)
-        await unlink(path)
+        const result = await accept(job.profile, job.enable)
+        if (result?.commandsOff) await rename(path, path + '.saved')
+        else await unlink(path)
       } catch (error) {
-        if (error.code === 'ENOENT') continue
+        try { await rename(path, path + '.failed') } catch (e) { if (e.code === 'ENOENT') continue; throw e }
         log(`Profile import ${name} failed: ${error.message}`)
-        await rename(path, path + '.failed').catch(() => {})
       }
     }
   }

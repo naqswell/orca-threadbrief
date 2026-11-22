@@ -209,6 +209,9 @@ export function bindProfiles(orca, { settings, focused }) {
   })
   return async (profile, enable) => {
     await save({profile: {...profile, enabled: enable}})
-    if (enable) await host.call('settings.set', { key: 'profileActions', value: true })
+    if (enable) {
+      try { await host.call('settings.set', { key: 'profileActions', value: true }) }
+      catch { return { commandsOff: true } }
+    }
   }
 }

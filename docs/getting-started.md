@@ -93,7 +93,7 @@ Skip this if history is enough. Use a saved report for a stable handoff or when 
 | What you see | What to try |
 | --- | --- |
 | The panel asks you to select an agent tab | Select the conversation itself, not a file, empty shell, or browser tab. In a split terminal, select the pane with the agent. |
-| A moving field of threads fills the panel | The selected summary is loading. Quick switches skip it; with reduced motion enabled, the threads stay still. |
+| **Loading summary…** | The panel is fetching its first brief. After that, switching sessions keeps the previous brief visible until the next one is ready, with no loading animation. |
 | **Agent working** | You can keep reading this session’s last completed reply or saved report. The unfinished turn is not a summary. If there is no previous result, the panel waits for the first one. |
 | **Update available · Refresh** | You were reading when the same session changed. Your selection and scroll position stay put until you choose **Refresh**. Switching sessions follows the new selection; turning off history or excluding it clears the old view immediately. |
 | You prefer a live view even while reading | Turn off **Pause updates while reading** in the gear under **Panel**, or in Orca’s plugin settings. Any pending result appears immediately; future updates no longer wait for **Refresh**. This does not start a model. |

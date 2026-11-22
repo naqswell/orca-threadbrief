@@ -1,0 +1,78 @@
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import { execFile } from 'node:child_process'
+import { existsSync } from 'node:fs'
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { createServer } from 'node:http'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { promisify } from 'node:util'
+
+async function exercisePanel() {
+  const $ = s => document.querySelector(s), delay = ms => new Promise(r => setTimeout(r, ms))
+  const events = {}, prefs = { summaryStrategy: 'brief', historyOutcome: true, pauseWhileReading: true }
+  const summary = title => ({ title, contextKey: title, scope: 'session', outcome: title + ' outcome' })
+  let first, view = new Promise(resolve => { first = resolve }), ready = false
+  window.orca = {
+    plugin: { on: (k, fn) => { events[k] = fn }, request: async k => {
+      if (k === 'summary.focused') return view
+      if (k === 'workflow.view') return { state: 'none' }
+      if (k === 'recap.agents') { if (!ready) throw Error('Still working'); return [{ id: 'a', name: 'Agent A' }, { id: 'b', name: 'Agent B' }] }
+      if (k === 'recap.preview') return { token: 'preview-a', title: 'Third', agent: 'a', environment: 'local', prompt: 'Approved for Agent A' }
+    } },
+    settings: { get: async () => prefs, onDidChange: fn => { events.settings = fn } }
+  }
+  const changed = reason => events['summary.changed']({ reason })
+  const check = (ok, message) => { if (!ok) throw Error(message) }
+  await import('/panel.mjs')
+  await delay(370)
+  const initial = $('#loading').getBoundingClientRect()
+  check(initial.height > 0 && initial.height < 60 && !document.getAnimations().length && $('#loading').textContent.trim() === 'Loading summary…', 'First load was not a static, single-line status')
+  first(summary('First'))
+  await delay(10)
+  check($('main h1')?.textContent === 'First', 'First session did not render')
+  let release
+  view = new Promise(r => { release = r })
+  changed('selection')
+  await delay(370)
+  check($('main h1')?.textContent === 'First' && !$('main').hidden && $('main').inert, 'Old brief disappeared or stayed actionable during a slow switch')
+  check(!$('#loading').getClientRects().length && !document.getAnimations().length, 'Loader or animation appeared during a slow switch')
+  view = summary('Third'); changed('selection'); await delay(5)
+  check($('main h1')?.textContent === 'Third' && !$('main').inert && !document.getAnimations().length, 'New selection did not replace the old brief directly')
+  release(summary('Late second')); await delay(5)
+  check($('main h1')?.textContent === 'Third', 'Late result replaced the selected session')
+  $('#open-settings').click(); await delay(5)
+  check($('#preview-recap').disabled, 'A working session allowed a preview')
+  ready = true; changed('session'); await delay(5)
+  check(!$('#preview-recap').disabled, 'Open settings did not notice the session finished')
+  $('#preview-recap').click(); await delay(5)
+  check(!$('#recap-preview').hidden, 'Preview did not appear')
+  prefs.recapAgent = 'b'; events.settings({ key: 'recapAgent' }); await delay(5)
+  check($('#recap-agent').value === 'b' && $('#recap-preview').hidden, 'A preview for the previous agent remained actionable')
+  $('#close-settings').click(); $('main').focus()
+  const text = $('main .prose p').firstChild, range = document.createRange()
+  range.selectNodeContents(text); getSelection().removeAllRanges(); getSelection().addRange(range)
+  view = { ...summary('Third'), outcome: 'Updated outcome' }; changed('session'); await delay(5)
+  check(!$('#refresh-brief').hidden && getSelection().toString() === 'Third outcome' && $('main .prose p').firstChild === text, 'Same-session refresh disturbed the reader')
+  prefs.pauseWhileReading = false; events.settings({ key: 'pauseWhileReading' }); await delay(5)
+  check($('main .prose p').textContent === 'Updated outcome', 'Live mode did not apply the pending update')
+  view = { scope: 'excluded', excluded: 'session' }; changed('exclusions')
+  check(!$('main').textContent && !document.body.innerText.includes('Updated outcome'), 'Excluded text remained in the panel')
+}
+
+const chrome = [process.env.CHROME_PATH, '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', '/usr/bin/google-chrome', '/usr/bin/chromium', process.env.ProgramFiles && join(process.env.ProgramFiles, 'Google/Chrome/Application/chrome.exe')].find(p => p && existsSync(p))
+test('Chromium: direct session switches, reader focus, exclusions and recap destination', { skip: !chrome && 'Set CHROME_PATH to a Chromium executable' }, async t => {
+  const html = (await readFile(new URL('../panel.html', import.meta.url), 'utf8')).replace('<script type="module" src="./panel.mjs"></script>', `<script type="module">(${exercisePanel})().then(() => document.body.dataset.test = 'passed', error => document.body.dataset.error = error.message)</script>`)
+  const files = new Set(['/panel.mjs', '/panel.css', '/summary-markdown.mjs', '/vendor/marked.mjs', '/assets/session-summary.png'])
+  const server = createServer(async (req, res) => {
+    if (req.url === '/') { res.setHeader('content-type', 'text/html'); res.end(html); return }
+    if (!files.has(req.url)) { res.writeHead(404).end(); return }
+    res.setHeader('content-type', req.url.endsWith('.mjs') ? 'text/javascript' : req.url.endsWith('.css') ? 'text/css' : 'image/png')
+    res.end(await readFile(new URL('..' + req.url, import.meta.url)))
+  })
+  await new Promise(r => server.listen(0, '127.0.0.1', r)); t.after(() => server.close())
+  const profile = await mkdtemp(join(tmpdir(), 'threadbrief-chromium-'))
+  t.after(() => rm(profile, { recursive: true, force: true, maxRetries: 3 }))
+  const { stdout } = await promisify(execFile)(chrome, ['--headless', '--disable-gpu', '--no-first-run', '--disable-background-networking', `--user-data-dir=${profile}`, '--virtual-time-budget=5000', '--dump-dom', `http://127.0.0.1:${server.address().port}/`], { timeout: 30000, maxBuffer: 2 ** 20 })
+  assert.match(stdout.match(/<body[^>]*>/)?.[0] || '', /data-test="passed"/)
+})

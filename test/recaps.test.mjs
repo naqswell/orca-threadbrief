@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { bindRecaps } from '../recaps.mjs'
+import { orcaJson } from '../session-context.mjs'
 
 function fixture() {
   const handlers = {}, calls = [], reads = []
@@ -12,7 +13,7 @@ function fixture() {
     return { orcaSessionId: state.historyId, entries: [{ role: 'user', kind: 'message', text: 'Context '.repeat(2400) }, { role: 'assistant', kind: 'message', text: 'tool private', tools: ['tool'] }, { role: 'user', kind: 'message', text: 'Question?' }, { role: 'assistant', kind: 'message', text: 'One answer.' }] }
   }
   bindRecaps(orca, { settings: async () => ({ summaryStrategy: state.strategy }), source: async () => { if (state.excluded) throw Error('History off'); return { key: state.key, id: state.id, workspaceId: 'original-ws', environment: 'local' } }, command })
-  return { state, calls, reads, preview: () => handlers['recap.preview']({ agent: 'alternative' }), start: p => handlers['recap.start'](p) }
+  return { state, calls, reads, preview: () => handlers['recap.preview']({ agent: 'alternative' }), start: (p, ctx) => handlers['recap.start'](p, ctx) }
 }
 
 for (const [strategy, entries, budget] of [['brief', '12', 3000], ['handoff', '48', 12000]]) {
@@ -48,4 +49,25 @@ test('instant, excluded, mismatched history, and changed target cannot dispatch'
   const r = await f.preview(); f.state.strategy = 'handoff'
   await assert.rejects(f.start(r), /changed/)
   assert.deepEqual(f.calls, [])
+})
+
+test('closing the recap panel cancels a pending start before launch', async () => {
+  const f = fixture()
+  f.state.strategy = 'brief'
+  const preview = await f.preview(), controller = new AbortController()
+  const request = f.start(preview, { signal: controller.signal })
+  controller.abort()
+  await assert.rejects(request, { name: 'AbortError' })
+  assert.deepEqual(f.calls, [])
+})
+
+test('CLI launch errors never echo the conversation excerpt', async t => {
+  const executable = process.env.ORCA_CLI_COMMAND
+  t.after(() => { if (executable === undefined) delete process.env.ORCA_CLI_COMMAND; else process.env.ORCA_CLI_COMMAND = executable })
+  process.env.ORCA_CLI_COMMAND = 'threadbrief-test-missing-executable'
+  await assert.rejects(orcaJson(['agent', 'launch', '--prompt', 'synthetic private excerpt']), error => {
+    assert.doesNotMatch(error.message, /synthetic private excerpt|--prompt/)
+    assert.match(error.message, /Check Orca/)
+    return true
+  })
 })

@@ -2,7 +2,7 @@
   "manifestVersion": 2,
   "id": "session-summary",
   "name": "Threadbrief",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "icon": "assets/session-summary.png",
   "cover": { "path": "assets/threadbrief-cover.png", "alt": "Threadbrief: a mint thread leads to a stack of notes labeled Goal, Done and Next." },
   "description": "Pick up where your agent left off. Read its last reply or a saved handoff with the goal, result and next step.",

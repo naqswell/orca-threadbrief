@@ -51,14 +51,15 @@ export function bindRecaps(orca, { source, command, settings }) {
     preview = { token, key: before.key, strategy, agent, prompt, expires: Date.now() + 180000 }
     return { token, prompt, title: before.title || before.id, agent, environment: before.environment }
   })
-  orca.panels.handle('recap.start', async ({ token } = {}) => {
+  orca.panels.handle('recap.start', async ({ token } = {}, { signal } = {}) => {
     const p = preview
     if (!p || p.token !== token || p.expires < Date.now()) throw Error('Preview again before starting a recap.')
     preview = undefined
-    ++revision
-    const strategy = await plans()
+    const ticket = ++revision
     const active = await source()
-    if (active.key !== p.key || strategy !== p.strategy) throw Error('The selection or strategy changed. Preview again.')
+    const strategy = await plans()
+    if (ticket !== revision || active.key !== p.key || strategy !== p.strategy) throw Error('The selection or strategy changed. Preview again.')
+    signal?.throwIfAborted()
     if (active.environment !== 'local') {
       const result = await command(['agent', 'launch', '--environment', active.environment, '--worktree', active.worktree, '--agent', p.agent, '--surface', 'terminal', '--prompt', p.prompt])
       if (result?.outcome?.kind !== 'terminal' || !result.outcome.handle) throw Error('Remote launch was not confirmed. Check the server before trying again.')
@@ -68,4 +69,5 @@ export function bindRecaps(orca, { source, command, settings }) {
     const focused = await orca.host.call('terminal.focus', { terminalId }).catch(() => null)
     return { focused: focused?.focused === true }
   })
+  return () => { ++revision; preview = undefined }
 }

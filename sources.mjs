@@ -35,12 +35,20 @@ async function pairedAddress(id, command, environment) {
 export function bindSources(orca, { settings, reveal, roots = [directory, legacyDirectory], command = orcaJson, focus = readFocus, interval = 1000 }) {
   const listeners = new Set(), created = new Map()
   const completed = new Map()
-  let selection, timer, stopped = false, checking = false, generation = 0
+  let selection, observedPane, timer, stopped = false, checking = false, generation = 0
   const context = () => orca.host.call('workspace.readContext')
   const getFocus = () => focus().catch(() => null)
   const post = reason => { if (listeners.size && !stopped) orca.panels.post('summary.changed', { reason }) }
   const invalidate = reason => { generation++; selection = null; post(reason) }
   let observedWorkspace
+  async function verifySelection(start, workspaceId, key) {
+    const [after, selectedAfter] = await Promise.all([context(), getFocus()])
+    checkGeneration(start)
+    if (after?.workspaceId !== workspaceId || focusKey(selectedAfter) !== key) {
+      invalidate('selection')
+      throw Error('The active selection changed.')
+    }
+  }
   const resolve = (active, selected) => focusedSession(active?.workspaceId, selected, command).catch(() => null)
   async function metadata() {
     const [active, selected] = await Promise.all([context(), getFocus()])
@@ -62,7 +70,7 @@ export function bindSources(orca, { settings, reveal, roots = [directory, legacy
     if (excluded || prefs.historyOutcome === false || (session?.environment !== 'local' && prefs.pairedHistory === false)) throw Error('History is off for this selection.')
     const live = session?.environment && session.environment !== 'local' ? await remoteState(session, active.workspaceId) : session
     if (!session || !live || live.state !== 'done' || (session.environment === 'local' && selected.host && selected.host !== 'local')) throw Error('Select a finished agent on a connected Orca host.')
-    checkGeneration(start)
+    await verifySelection(start, active.workspaceId, focusKey(selected))
     return { id: session.id, environment: session.environment, worktree: selector(active.workspaceId), workspaceId: active.workspaceId, title: session.title, key: JSON.stringify([active.workspaceId, focusKey(selected), session.id, live.updatedAt]) }
   }
   function checkGeneration(start) {
@@ -119,6 +127,7 @@ export function bindSources(orca, { settings, reveal, roots = [directory, legacy
     let working = false
     let view = session ? { scope: 'session', title: session.title, summary: null } : { scope: 'none', summary: null }
     checkGeneration(start)
+    if (!includePublication) observedPane = current
     if (excluded) view = { scope: 'excluded', excluded, summary: null }
     else if (session) {
       working = session.state === 'working'
@@ -140,11 +149,10 @@ export function bindSources(orca, { settings, reveal, roots = [directory, legacy
           working = live?.state === 'working'
           if (paired) Object.assign(current, { monitor: true, nextCheck: Date.now() + 4000, liveState: live?.state, updatedAt: live?.updatedAt })
           if (!live) view.emptyReason = 'unavailable'
-          else if (working && completed.has(contextKey)) view.outcome = completed.get(contextKey)
           else if (working || live.state === 'done') {
             checkGeneration(start)
             const history = await command(['agent', 'read', `orca_session_id:${session.id}`, '--environment', session.environment, '--limit', '20']).catch(() => null)
-            const outcome = working ? previousOutcome(history, session.id) : lastOutcome(history, session.id)
+            const outcome = working ? previousOutcome(history, session.id) ?? completed.get(contextKey) : lastOutcome(history, session.id)
             if (outcome) view.outcome = outcome
             else view.emptyReason = working ? 'waiting' : paired && !history ? 'unavailable' : 'noReply'
           } else view.emptyReason = 'noReply'
@@ -172,13 +180,8 @@ export function bindSources(orca, { settings, reveal, roots = [directory, legacy
       if (privateData && JSON.stringify(privateData.meta) === JSON.stringify(view.summary) && privateData.legacyPublication) view.legacyPublication = privateData.legacyPublication
     }
     current.fingerprint = await fingerprint(current.files)
-    const [after, selectedAfter] = await Promise.all([context(), getFocus()])
-    if (generation !== start) throw Error('The active selection changed.')
-    if (after?.workspaceId !== workspaceId || focusKey(selectedAfter) !== key) {
-      invalidate('selection')
-      throw Error('The active selection changed.')
-    }
-    if (!excluded && session && !working && view.outcome) {
+    await verifySelection(start, workspaceId, key)
+    if (view.outcome && completed.get(contextKey) !== view.outcome) {
       completed.delete(contextKey)
       completed.set(contextKey, view.outcome)
       if (completed.size > 12) completed.delete(completed.keys().next().value)
@@ -203,7 +206,7 @@ export function bindSources(orca, { settings, reveal, roots = [directory, legacy
   }
   function close(_input, { panel } = {}) {
     listeners.delete(panel?.id ?? 'summary')
-    if (!listeners.size) { clearInterval(timer); timer = null; selection = null; generation++ }
+    if (!listeners.size) { clearInterval(timer); timer = null; observedPane = selection = null; generation++ }
     return null
   }
   function stop() { stopped = true; clearInterval(timer); timer = null; listeners.clear(); selection = null; generation++ }
@@ -233,10 +236,11 @@ export function bindSources(orca, { settings, reveal, roots = [directory, legacy
     void maybeReveal(next?.workspaceId)
   })
   orca.events.on('agent.status.changed', event => {
-    const current = selection
+    const current = selection ?? observedPane
     if (!current || (event.workspaceId && event.workspaceId !== current.workspaceId && event.workspaceId !== current.selected?.workspace && event.workspaceListId !== current.workspaceId)) return
     const pane = current.agent?.paneKey ?? (current.selected?.tab && current.selected?.leaf ? `${current.selected.tab.replace(/^web-terminal-/u, '')}:${current.selected.leaf}` : null)
     if (pane && pane === event.paneKey) invalidate('session')
   })
-  return { focused, workflowFocused, recapSource, close, frame, stop, exclusions }
+  function historyChanged() { completed.clear(); invalidate('history-setting') }
+  return { focused, workflowFocused, recapSource, close, frame, stop, exclusions, historyChanged }
 }
