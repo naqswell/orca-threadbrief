@@ -14,8 +14,8 @@
       <span>Refresh</span>
     </button>
     <div class="handoff-control" hidden>
-      <button type="button" id="open-handoff" aria-haspopup="dialog" aria-describedby="handoff-hint">Save progress…</button>
-      <span id="handoff-hint" role="tooltip">Keep your agent’s decisions and next steps so you can pick up where you left off.</span>
+      <button type="button" id="open-handoff" aria-haspopup="dialog" aria-describedby="handoff-hint">Update report…</button>
+      <span id="handoff-hint" role="tooltip">Save a new revision without rereading the whole conversation.</span>
     </div>
     <button id="open-settings" type="button" aria-label="Settings" title="Settings" aria-haspopup="dialog">
       <img id="panel-icon" src="./assets/session-summary.png" width="24" height="24" alt="" hidden>
@@ -41,23 +41,22 @@
     <button id="manual-load" type="button" hidden>Load brief</button>
   </div>
   <dialog id="handoff-dialog" aria-labelledby="handoff-title" closedby="any">
-    <div class="dialog-heading"><h2 id="handoff-title">Save session progress</h2><button type="button" id="close-handoff" autofocus>Close</button></div>
-    <p>Ask your agent for a progress note, then save it here. You can still read it after the conversation moves on. This does not start another agent.</p>
+    <div class="dialog-heading"><h2 id="handoff-title">Session report</h2><button type="button" id="close-handoff" autofocus>Close</button></div>
+    <p id="checkpoint-target" class="muted"></p>
     <section><h3>1. Ask your current agent</h3>
       <p>Paste the instructions into a regular turn. Writing a checkpoint uses that agent’s normal tokens. Copying does not send anything.</p>
-      <details><summary>Read the instructions</summary><pre id="checkpoint-prompt">Only when I ask for a checkpoint, end your reply with the block below. Write a complete handoff in our conversation’s language. Carry forward still-relevant decisions and checks, replace obsolete information, and state any gaps in the history you can see. Each field is one line of at most 480 characters. Use “None” where appropriate. Increment revision for each new checkpoint. Do not start another agent or change any files to do this.
-
-```threadbrief-checkpoint
-{"revision":1,"goal":"…","done":"…","decisions":"…","checks":"…","open":"…","next":"…"}
-```
-Please write the first checkpoint now if this conversation has none; otherwise update the latest one.</pre></details>
+      <details><summary>Read the instructions</summary><pre id="checkpoint-prompt"></pre></details>
       <button type="button" id="copy-checkpoint">Copy instructions</button>
     </section>
     <section><h3>2. Save the completed checkpoint</h3>
       <p>Save after the agent finishes, before its next reply. Only the marked handoff is kept on this desktop. Saving makes no model request.</p>
-      <p id="checkpoint-target" class="muted"></p>
+      <p>Already have JSON from a separate recap? Use it below instead.</p>
       <button type="button" id="save-checkpoint" disabled>Save checkpoint</button>
     </section>
+    <details><summary>Use a model-written draft</summary>
+      <label>Paste the report JSON from your recap session<textarea id="report-draft" rows="5" maxlength="16384"></textarea></label>
+      <button type="button" id="import-draft" disabled>Save draft to this session</button>
+    </details>
     <p id="checkpoint-status" role="status"></p>
   </dialog>
   <dialog id="settings-dialog" aria-labelledby="settings-title" closedby="any">
@@ -78,6 +77,13 @@ Please write the first checkpoint now if this conversation has none; otherwise u
       <label class="option"><span>Open for new worktrees<small>Only when the new worktree has a saved summary.</small></span><input name="autoOpen" type="checkbox"></label>
     </fieldset>
     </details>
+    <details name="settings-section" id="format-settings">
+      <summary>Report format</summary>
+      <fieldset class="preference-group" disabled><legend class="visually-hidden">Report format</legend>
+        <label>How should the agent present your report?<textarea name="reportFormat" rows="3" maxlength="1000" placeholder="Start with one sentence, then a table of decisions and evidence."></textarea></label>
+        <small>Leave empty for Goal, Result, Confirmation and Next. Applies when you next ask for a report; existing reports stay as written.</small>
+      </fieldset>
+    </details>
     <details name="settings-section" id="recap-settings">
       <summary>Recap strategy and model <small id="recap-mode-label"></small></summary>
     <fieldset class="preference-group" disabled>
@@ -96,7 +102,10 @@ Please write the first checkpoint now if this conversation has none; otherwise u
         <button type="submit" disabled>Use this model</button>
       </form>
       <small>The selected agent uses its configured account and tool permissions. Starting a recap sends the preview below to its provider.</small>
-      <button id="preview-recap" type="button">Preview recap request</button>
+      <button id="preview-recap" type="button">Choose messages…</button>
+      <div id="recap-evidence" hidden><p id="evidence-hint"></p><div id="evidence-list"></div>
+        <button type="button" id="confirm-evidence" disabled>Preview recap request</button>
+      </div>
       <div id="recap-preview" hidden>
         <p id="recap-destination"></p>
         <pre id="recap-text"></pre>
@@ -107,7 +116,7 @@ Please write the first checkpoint now if this conversation has none; otherwise u
     </details>
     <details name="settings-section" id="summary-guide">
       <summary>How to get your first summary</summary>
-      <p>Select an agent tab and give it a task. When it finishes, open this panel to read its reply. For a paired server, leave “Read paired session history” on. No profile or API key needed.</p>
+      <p>Select an agent tab and open Threadbrief. Choose Create report for a goal, result, confirmation and next step, or expand Recent messages to read the agent’s words. No profile or API key needed.</p>
       <p>Want a shorter reply? Send this to your agent:</p>
       <blockquote id="recap-prompt">Sum up this task in my language. Use three short lines: Goal, Done, Next. Mention anything still unresolved. If nothing remains, say so.</blockquote>
       <button id="copy-prompt" type="button">Copy prompt</button>

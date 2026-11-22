@@ -45,6 +45,9 @@ test('shows actual preferences and applies a patch without disturbing others', a
   const {config, prefs} = setup()
   assert.deepEqual(await config({op:'show'}), prefs)
   assert.deepEqual(await config({op:'apply', value:{manualLoad:true, recapModel:'vendor/model'}}), {...defaults, unrelated:'preserved', manualLoad:true, recapModel:'vendor/model'})
+  const format = 'Answer in French.\nUse a two-column table.'
+  assert.equal((await config({op:'apply', value:{reportFormat:format}})).reportFormat, format)
+  for (const bad of ['x'.repeat(1001), 'Do not store\u0000']) await assert.rejects(config({op:'apply', value:{reportFormat:bad}}))
 })
 
 test('an agent replaces its reported models without changing pins or other hosts and agents', async () => {

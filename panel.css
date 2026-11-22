@@ -7,7 +7,11 @@ h2 { font-size: 16px }
 h3 { font-size: 14px }
 p + p, dl, nav, .row, fieldset, .step, #project-preview:not(:empty) { margin-top: 10px }
 dt, figcaption { font-weight: 600; color: var(--orca-muted-foreground, #555) }
-.history > h2 { margin-bottom: 8px; font-size: 12px; font-weight: 600; color: var(--orca-muted-foreground, #666) }
+.history { margin-top: 16px; border-top: 1px solid var(--edge) }
+.history > summary { padding-block: 10px; color: var(--orca-muted-foreground, #666); font-weight: 600 }
+main section > button { margin-top: 8px }
+.evidence-choice { display: flex; align-items: baseline; gap: 7px; margin: 6px 0; font-size: 13px }
+#evidence-list { max-height: 15em; overflow: auto }
 .history .prose + .prose { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--edge) }
 .prose { line-height: 1.55; min-width: 0 }
 .prose :where(p, blockquote, pre, ul, ol, h3, h4, h5, h6) { margin: 0 }

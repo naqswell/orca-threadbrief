@@ -22,6 +22,10 @@ node threadbrief-config.mjs show --plugin local.session-summary
 
 Check the returned values against the requested patch. On a failed or unconfirmed write, inspect `show` before retrying. A file on disk is not proof that Orca applied it. If the worker is not running, check `orca plugin list --environment local --json` and `orca plugin logs local.session-summary --environment local --json`. This CLI needs an installed, enabled worker, not a development folder.
 
+## Report format
+
+From **0.3.0**, set `reportFormat` to the reader’s presentation preference (up to 1,000 characters). For example: `{"reportFormat":"Write in French. Start with a conclusion, then a table: decision | evidence. Finish with open questions."}`. Use `""` for the standard layout. Apply and verify as above. The original agent’s checkpoint instructions and the separate recap preview both include it. Changing it does not generate a report, send history, or reformat an existing save.
+
 ## Choose an agent or model
 
 Use `orca agent installed --environment local --worktree active --json` to discover agent IDs for a local workspace. For a paired workspace use its server selector and worktree ID instead. `recapAgent` is that installed agent's ID. `recapModel` is an identifier the agent accepts on the **source host**; the agent list is not a model catalog. Set both in one patch when pinning a model. Use `"recapModel":""` for the agent's configured default; use `"recapAgent":""` and `"recapModel":""` for the host default. There is no need to guess a model ID or start a paid test session.

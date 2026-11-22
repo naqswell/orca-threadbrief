@@ -1,8 +1,8 @@
 # Threadbrief for Orca
 
-Threadbrief puts recent replies from the selected Orca session in the sidebar. A final “sent” or “published” update stays next to the earlier reply explaining what changed. Switch tabs and the brief follows. To have a model write a new recap, preview the request and start a separate agent session.
+Threadbrief keeps one report per Orca session. Open the sidebar to see the goal, result, confirmation and next step. If nobody has written a report yet, **Recent messages** lets you inspect the agent’s replies without mistaking them for a handoff.
 
-For a long task, choose **Save progress… → Copy instructions** and paste them into your next message in the same conversation. After the agent replies, **Save checkpoint** keeps its decisions, checks and next steps on your desktop. Writing uses that agent’s usual tokens, without a second recap session. [How checkpoints work](docs/getting-started.md#keep-a-running-handoff-in-the-same-session).
+Choose **Create report… → Copy instructions** and paste them into your next message in the same conversation. **Save checkpoint** keeps the reply on your desktop. At the next milestone, **Update report…** gives the agent the previous facts, not a replay of the chat. Writing uses that agent’s usual tokens; opening or refreshing the sidebar does not start a model. [How checkpoints work](docs/getting-started.md#keep-a-running-handoff-in-the-same-session).
 
 <picture>
   <source media="(prefers-reduced-motion: reduce)" srcset="assets/threadbrief-demo.png">
@@ -36,6 +36,8 @@ A folder installation uses `local.session-summary` instead. **If you already use
 ## Settings
 
 Click the gear at the top of the panel. **Brief recap** (default) asks for up to 90 words; **Detailed handoff** asks for up to 400. In **Recap strategy and model**, keep the agent’s default or pick a model from the [list reported by your agent](docs/configuration.md#let-an-agent-fill-the-model-picker). Check the agent, model, host and excerpt before starting. **Instant** only shows existing text. [Compare strategies and costs](docs/getting-started.md#choose-a-strategy-and-an-agent).
+
+**Your layout:** under **Settings → Report format**, describe the language and structure you want, for example “In Spanish, give me a decision table and finish with unanswered questions.” The next report uses that layout; its short factual record remains available underneath. With a separate recap agent, select individual messages before previewing. Nothing is selected or sent automatically.
 
 Prefer to load a brief yourself? Turn on **Load briefs only on click**. Click **Load brief** once, switch sessions, and return to the version you read. Use **Refresh** in the top bar to reread the report or latest reply.
 

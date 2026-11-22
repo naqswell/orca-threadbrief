@@ -15,7 +15,7 @@ async function setup(t) {
   const root = join(dir, 'reports'), legacyRoot = join(dir, 'legacy'), handlers = {}, calls = []
   const state = { environment:'local', key:'first', id:'same', entries:[], allowed:true }
   bindCheckpoints({panels:{handle:(k, fn) => { handlers[k] = fn }}}, {
-    root, legacyRoot, source:async () => { if (!state.allowed) throw Error('History is off'); return {...state} },
+    root, legacyRoot, settings:async () => ({reportFormat:state.format}), source:async () => { if (!state.allowed) throw Error('History is off'); return {...state} },
     command:async args => {
       calls.push(args)
       assert.deepEqual(args, ['agent','read','orca_session_id:same','--environment',state.environment,'--limit','100'])
@@ -23,7 +23,7 @@ async function setup(t) {
       return {orcaSessionId:state.returnId ?? state.id, state:state.working ? 'working' : state.noTranscriptState ? undefined : 'done', entries:state.entries}
     }
   })
-  return { state, root, legacyRoot, calls, target:handlers['checkpoint.target'], capture:handlers['checkpoint.capture'], saved:(env = state.environment) => readSnapshot(root, ['sessions',env], sessionFilename(state.id)) }
+  return { state, root, legacyRoot, calls, target:handlers['checkpoint.target'], capture:handlers['checkpoint.capture'], importDraft:handlers['checkpoint.import'], saved:(env = state.environment) => readSnapshot(root, ['sessions',env], sessionFilename(state.id)) }
 }
 
 test('checkpoint capture stays in the original local or paired session; newer snapshots replace, duplicates are harmless, old ones cannot roll back', async t => {
@@ -35,10 +35,11 @@ test('checkpoint capture stays in the original local or paired session; newer sn
     f.state.entries = [entry(block(90,'Ignore user'),'user'), entry(block(1,'Reserved '+environment)), {...entry(block(91,'Ignore tool')),tools:['note']}]
     assert.deepEqual(await f.capture(target), {revision:1})
     f.state.entries = [entry(block(2,'Reserved '+environment+'; sent invites'))]
-    await f.capture(target); await f.capture(target)
+    await assert.rejects(f.capture(target), /changed/)
+    await f.capture(await f.target()); await f.capture(await f.target())
     for (const text of [block(1,'Old'), block(2,'Conflict'), '```threadbrief-checkpoint\n{}\n```', '```threadbrief-checkpoint\n{"revision":3}']) {
       f.state.entries = [entry(text)]
-      await assert.rejects(f.capture(target))
+      await assert.rejects(f.capture(await f.target()))
     }
     assert.equal((await f.saved()).checkpoint.revision, 2)
   }
@@ -84,4 +85,27 @@ test('a checkpoint cannot replace or shadow an existing manual report', async t 
   await saveSession(f.root, 'local', 'same', manual)
   await assert.rejects(f.capture(target), /manually saved/)
   assert.equal((await f.saved()).done, 'Manual')
+})
+
+test('formatted drafts attach only to their original host, report and format; malformed changes leave the saved version alone', async t => {
+  const f = await setup(t)
+  f.state.format = 'Use a table.'
+  const target = await f.target()
+  const fields = {reportKey:target.key, revision:1, goal:'Seats', done:'Reserved', checks:'Receipt', next:'Invite', decisions:'None', open:'None'}
+  const save = async (record, scope = target) => f.importDraft({key:scope.key, draft:JSON.stringify(record)})
+  await assert.rejects(save(fields), /Markdown/)
+  const report = {...fields, formatted:'| Result | Check |\\n|---|---|\\n| Reserved | Receipt |'.replaceAll('\\n','\n')}
+  f.state.environment = 'peer'
+  await assert.rejects(save(report, await f.target()), /another session/)
+  f.state.environment = 'local'
+  f.state.format = 'Only bullets'
+  await assert.rejects(save(report), /changed/)
+  f.state.format = 'Use a table.'
+  await save(report)
+  assert.equal((await f.saved()).checkpoint.formatted, report.formatted)
+  await assert.rejects(save({...report, done:'Stale'}), /changed/)
+  const next = await f.target()
+  assert.equal(next.fields.done, 'Reserved')
+  assert.equal(next.fields.formatted, undefined)
+  assert.deepEqual(f.calls, [])
 })

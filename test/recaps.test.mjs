@@ -14,28 +14,52 @@ function fixture() {
     if (args[1] === 'installed') return { agents: [{ id: 'alternative', name: 'Alternative', default: true }] }
     if (args[1] === 'launch') { calls.push(args); if (state.refused) throw Error('Unknown model'); return { outcome: { kind: 'terminal', handle: 'new-terminal' } } }
     reads.push(args)
-    return { orcaSessionId: state.historyId, entries: [{ role: 'user', kind: 'message', text: 'Context '.repeat(2400) }, { role: 'assistant', kind: 'message', text: 'tool private', tools: ['tool'] }, { role: 'user', kind: 'message', text: 'Question?' }, { role: 'assistant', kind: 'message', text: 'One answer.' }] }
+    return { orcaSessionId: state.historyId, entries: state.entries ?? [{ role: 'user', kind: 'message', text: 'Context '.repeat(2400) }, { role: 'assistant', kind: 'message', text: 'tool private', tools: ['tool'] }, { role: 'user', kind: 'message', text: 'Question?' }, { role: 'assistant', kind: 'message', text: 'One answer.' }] }
   }
   const target = async () => ({ environment: state.environment ?? 'local', worktree: 'id:original-ws' })
-  bindRecaps(orca, { settings: async () => ({ summaryStrategy: state.strategy, recapModel: state.model, recapAgent: state.agent, recapEffort: state.effort }), target, source: async () => { if (state.excluded) throw Error('History off'); return { ...await target(), key: state.key, id: state.id, workspaceId: 'original-ws' } }, command })
-  return { state, calls, reads, catalogs, preview: () => handlers['recap.preview']({ agent: 'alternative' }), start: (p, ctx) => handlers['recap.start'](p, ctx) }
+  bindRecaps(orca, { settings: async () => ({ summaryStrategy: state.strategy, recapModel: state.model, recapAgent: state.agent, recapEffort: state.effort }), target, source: async () => { if (state.excluded) throw Error('History off'); return { ...await target(), key: state.key, id: state.id, workspaceId: 'original-ws' } }, command, base:async () => state.base ?? {key:'base', revision:0, fields:null} })
+  const evidence = () => handlers['recap.evidence']({agent:'alternative'})
+  const select = (e, selected) => handlers['recap.preview']({token:e.token, selected})
+  return { state, calls, reads, catalogs, evidence, select, preview:async () => select(await evidence(), [2]), start:(p, ctx) => handlers['recap.start'](p, ctx) }
 }
 
 for (const [strategy, entries, budget] of [['brief', '12', 3000], ['handoff', '48', 12000]]) {
   test(`${strategy} previews only bounded visible messages and submits exactly the approved prompt once`, async () => {
     const f = fixture(); f.state.strategy = strategy
-    const p = await f.preview()
+    const choices = await f.evidence()
+    await assert.rejects(f.select(choices, []), /Select the messages/)
+    await assert.rejects(f.select(choices, [0, 1]), /exceeds/)
+    const p = await f.select(choices, [0])
     assert.deepEqual(f.reads, [['agent', 'read', 'orca_session_id:session', '--environment', 'local', '--limit', entries]])
-    const messages = JSON.parse(p.prompt.split('Conversation excerpt (oldest first):\n')[1])
-    assert.equal(messages.map(m => m.text).join('').length, budget)
-    assert.equal(messages.at(-1).text, 'One answer.')
-    assert.doesNotMatch(p.prompt, /tool private/)
+    const messages = JSON.parse(p.prompt.split('Selected messages (oldest first):\n')[1])
+    assert.equal(messages[0].text.length, budget)
+    assert.equal(messages.length, 1)
+    assert.doesNotMatch(p.prompt, /tool private|Question\?|One answer/)
     assert.deepEqual(f.calls, [])
     const [a, b] = await Promise.allSettled([f.start(p), f.start(p)])
     assert.equal(a.value.focused, true); assert.equal(b.status, 'rejected')
     assert.deepEqual(f.calls, [['agent.launch', { workspaceId: 'original-ws', agent: 'alternative', prompt: p.prompt }], ['terminal.focus', { terminalId: 'issued' }]])
   })
 }
+
+test('a checkpoint bounds the evidence, missing continuity requires a choice, and a changed report invalidates consent', async () => {
+  const f = fixture(), fields = {goal:'Plan', revision:4, done:'Venue reserved'}
+  f.state.strategy = 'brief'
+  f.state.base = {key:'draft-4', revision:4, fields, format:'Use a table of decisions.'}
+  const msg = text => ({kind:'message',role:'assistant',text})
+  f.state.entries = [msg('Earlier private material'), msg('```threadbrief-checkpoint\n'+JSON.stringify(fields)+'\n```')]
+  const unchanged = await f.evidence()
+  assert.equal(unchanged.matched, true); assert.deepEqual(unchanged.choices, [])
+  await assert.rejects(f.select(unchanged, []))
+  f.state.entries = [msg('Outside previous window'), msg('Tickets sent')]
+  const gap = await f.evidence()
+  assert.equal(gap.matched, false); assert.equal(gap.hasReport, true)
+  const p = await f.select(gap, [1])
+  assert.match(p.prompt, /Venue reserved/); assert.match(p.prompt, /Tickets sent/); assert.match(p.prompt, /Use a table of decisions/); assert.doesNotMatch(p.prompt, /Outside previous window/)
+  f.state.base = {...f.state.base, key:'draft-5'}
+  await assert.rejects(f.start(p), /changed/)
+  assert.deepEqual(f.calls, [])
+})
 
 for (const environment of ['local', 'peer']) {
   test(`pinned model on ${environment}: preview and launch agree; no fallback after refusal`, async () => {

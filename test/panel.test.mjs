@@ -29,14 +29,15 @@ async function exercisePanel(defaults) {
       }
       if (k === 'frame') { frameReads++; return null }
       if (k === 'workflow.view') return { state: 'none' }
-      if (k === 'checkpoint.target') return { key:'approved-turn', title:'On demand', environment:'peer' }
+      if (k === 'checkpoint.target') return { key:'approved-turn', revision:2, format:prefs.reportFormat, title:'On demand', environment:'peer' }
       if (k === 'checkpoint.capture') {
         if (input.key !== 'approved-turn') throw Error('Wrong checkpoint target')
         checkpointSaves++
-        view = { ...view, outcome:null, summary:{ goal:'Plan workshop', done:'Room booked', next:'Send invitations', checkpoint:{revision:3, decisions:'Room A', checks:'Capacity verified', open:'Guest count'} } }
+        view = { ...view, outcome:null, summary:{ goal:'Plan workshop', done:'Room booked', next:'Send invitations', checkpoint:{revision:3, decisions:'Room A', checks:'Capacity verified', open:'Guest count', formatted:'| Result | Check |\n|---|---|\n| Room booked | Capacity verified |'} } }
         return { revision:3 }
       }
       if (k === 'recap.agents') { inventories++; return [{ id: 'a', name: 'Agent A', preferred: true, catalogKey:'catalog-a' }, { id: 'b', name: 'Agent B', catalogKey:'catalog-b' }] }
+      if (k === 'recap.evidence') return {token:'pick', choices:[{role:'assistant', excerpt:'Tickets', chars:7}]}
       if (k === 'recap.preview') return { token: 'preview-a', title: 'Third', agent: 'a', model: prefs.recapModel, effort: prefs.recapEffort, environment: 'local', prompt: 'Approved for Agent A' }
     } },
     settings: { get: async key => key ? prefs[key] : prefs, set: async (key, value) => { prefs[key] = value; events.settings({ key }) }, onDidChange: fn => { events.settings = fn } },
@@ -47,13 +48,21 @@ async function exercisePanel(defaults) {
   await import('/panel.mjs')
   await delay(370)
   const initial = $('#loading').getBoundingClientRect()
-  const canSave = () => $('#open-handoff').getClientRects().length > 0
+  const create = () => [...document.querySelectorAll('main button')].find(b => b.textContent === 'Create report…')
+  const canSave = () => Boolean(create() && !create().closest('[inert]') && create().getClientRects().length || $('#open-handoff').getClientRects().length)
+  const chooseEvidence = async () => {
+    $('#preview-recap').click(); await delay(5)
+    check($('#confirm-evidence').disabled && $('#recap-preview').hidden, 'Evidence was preselected')
+    $('#evidence-list input').click(); $('#confirm-evidence').click(); await delay(5)
+  }
   check(!canSave(), 'Save offered before the first brief loaded')
   check(initial.height > 0 && initial.height < 60 && !document.getAnimations().length && $('#loading').textContent.trim() === 'Loading summary…', 'First load was not a static, single-line status')
   first({...summary('First'), earlierReplies:['Checked **36 corrections**.']})
   await delay(10)
   check($('main h1')?.textContent === 'First', 'First session did not render')
-  check($('main .history strong')?.innerText === '36 corrections' && $('main').innerText.indexOf('First outcome') < $('main').innerText.indexOf('36 corrections'), 'Earlier work was missing, collapsed, or shown as the latest update')
+  check(!$('main details').open && $('main').innerText.includes('No report yet') && !$('main').innerText.includes('First outcome'), 'Quotes presented as a report')
+  $('main details summary').click()
+  check($('main .history strong')?.innerText === '36 corrections' && $('main').innerText.indexOf('First outcome') < $('main').innerText.indexOf('36 corrections'), 'Earlier evidence missing or out of order')
   let release
   view = new Promise(r => { release = r })
   changed('selection')
@@ -71,6 +80,9 @@ async function exercisePanel(defaults) {
   check(inventories === 0 && !dialog.innerText.includes('Preview recap request'), 'Closed settings loaded or displayed model controls')
   $('#reading-settings summary').click()
   check(dialog.innerText.includes('Read paired session history') && inventories === 0, 'Opening reading preferences queried agents')
+  $('#format-settings summary').click()
+  const custom = $('[name="reportFormat"]')
+  custom.value = 'Make a table of checks.'; custom.dispatchEvent(new Event('change', {bubbles:true})); await delay(5)
   $('#recap-settings summary').click(); await delay(5)
   check(!$('#reading-settings').open && inventories === 1, 'Recap disclosure did not load on demand')
   check($('[name=\"summaryStrategy\"]').value === 'brief' && !$('#recap-controls').hidden, 'Fresh install did not offer Brief recap')
@@ -88,7 +100,7 @@ async function exercisePanel(defaults) {
   check(prefs.recapModel === 'example/quick', 'Selecting a reported name did not pin the exact ID')
   check(!$('#effort-field').hidden && [...effort.options].map(o => o.value).join(',') === ',low,high', 'Wrong efforts for the pinned model')
   effort.value = 'high'; effort.dispatchEvent(new Event('change')); await delay(5)
-  $('#preview-recap').click(); await delay(5)
+  await chooseEvidence()
   check(prefs.recapEffort === 'high' && $('#recap-destination').textContent.includes('Effort: high'), 'Preview lost the selected effort')
   await window.orca.storage.set('catalog-a', []); await delay(5)
   check(choice.value === 'example/quick', 'Catalog replacement silently cleared a pin')
@@ -101,7 +113,7 @@ async function exercisePanel(defaults) {
   check($('#preview-recap').disabled, 'Unsaved model allowed a preview')
   form.requestSubmit(); await delay(5)
   check(form.hidden && choice.value === model.value && prefs.recapModel === model.value, 'Model was not pinned')
-  $('#preview-recap').click(); await delay(5)
+  await chooseEvidence()
   check(!$('#recap-preview').hidden, 'Preview did not appear')
   check($('#recap-destination').textContent.includes('a / provider/version-1'), 'Preview omitted the pinned model')
   choice.value = ''; choice.dispatchEvent(new Event('change')); await delay(5)
@@ -114,10 +126,11 @@ async function exercisePanel(defaults) {
   agent.value = 'b'; agent.dispatchEvent(new Event('change')); await delay(5)
   check(prefs.recapAgent === 'b' && !prefs.recapModel && ![...choice.options].some(o => o.value === model.value), 'Changing agents kept another agent’s model')
   agent.value = 'a'; agent.dispatchEvent(new Event('change')); await delay(5)
-  $('#preview-recap').click(); await delay(5)
+  await chooseEvidence()
   prefs.recapAgent = 'b'; events.settings({ key: 'recapAgent' }); await delay(5)
   check($('#recap-agent').value === 'b' && $('#recap-preview').hidden, 'A preview for the previous agent remained actionable')
   $('#close-settings').click(); $('main').focus()
+  if (!$('main details.history').open) $('main details.history summary').click()
   const text = $('main .prose p').firstChild, range = document.createRange()
   range.selectNodeContents(text); getSelection().removeAllRanges(); getSelection().addRange(range)
   view = { ...summary('Third'), outcome: 'Updated outcome' }; changed('session'); await delay(5)
@@ -141,6 +154,7 @@ async function exercisePanel(defaults) {
   window.frameElement.height = '650'
   view = { ...view, outcome: Array.from({ length: 65 }, (_, i) => `Paragraph ${i + 1}`).join('\n\n') }
   load.click(); await delay(5)
+  $('main details.history summary').click()
   const paragraph = $('main .prose p')
   check(paragraph?.textContent === 'Paragraph 1' && load.hidden && !refresh.hidden, 'Loading did not replace the initial action with Refresh')
   check(canSave(), 'Loading the session reply did not make Save available')
@@ -175,13 +189,14 @@ async function exercisePanel(defaults) {
   pair.querySelector('summary').click(); await delay(20)
   check(frameReads === 2, 'Expanding the pair did not fetch its images')
   view = summary('On demand'); refresh.click(); await delay(5)
-  $('#open-handoff').click(); await delay(5)
+  create().click(); await delay(5)
   const handoff = $('#handoff-dialog')
   check(handoff.open && handoff.scrollWidth <= handoff.clientWidth && handoff.innerText.includes('normal tokens') && $('#checkpoint-target').textContent.includes('Paired server') && !checkpointSaves, 'Opening handoff hid costs, the target, or captured without consent')
+  check($('#checkpoint-prompt').textContent.includes('Make a table of checks.') && $('#checkpoint-prompt').textContent.includes('\"revision\":3'), 'Copied instructions missed the custom format or base revision')
   $('#save-checkpoint').click(); await delay(5)
   check(checkpointSaves === 1 && $('#checkpoint-status').textContent.includes('3 saved'), 'Explicit capture did not confirm the checkpoint')
   $('#close-handoff').click()
-  check($('main').innerText.includes('checkpoint 3') && $('main').innerText.includes('Capacity verified') && $('main').innerText.includes('Copy saved handoff'), 'Saved checkpoint did not replace the manual brief')
+  check($('main .prose td')?.textContent === 'Room booked' && $('main').innerText.includes('revision 3') && !$('main header details').open && $('main header details').textContent.includes('Capacity verified'), 'Custom report or compact underlying facts missing')
 }
 
 const chrome = [process.env.CHROME_PATH, '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', '/usr/bin/google-chrome', '/usr/bin/chromium', process.env.ProgramFiles && join(process.env.ProgramFiles, 'Google/Chrome/Application/chrome.exe')].find(p => p && existsSync(p))
@@ -189,7 +204,7 @@ test('Chromium: direct session switches, reader focus, exclusions and recap dest
   const manifest = JSON.parse(await readFile(new URL('../orca-plugin.json', import.meta.url), 'utf8'))
   const defaults = Object.fromEntries(manifest.contributes.settings.map(s => [s.key, s.default]))
   const html = (await readFile(new URL('../panel.html', import.meta.url), 'utf8')).replace('<script type="module" src="./panel.mjs"></script>', `<script type="module">(${exercisePanel})(${JSON.stringify(defaults)}).then(() => parent.document.body.dataset.test = 'passed', error => parent.document.body.dataset.error = error.message)</script>`)
-  const files = new Set(['/panel.mjs', '/panel.css', '/summary-markdown.mjs', '/vendor/marked.mjs', '/assets/session-summary.png'])
+  const files = new Set(['/panel.mjs', '/panel.css', '/report-format.mjs', '/summary-markdown.mjs', '/vendor/marked.mjs', '/assets/session-summary.png'])
   const server = createServer(async (req, res) => {
     if (req.url === '/') { res.setHeader('content-type', 'text/html'); res.end('<!doctype html><body><iframe width="340" height="650" src="/panel.html"></iframe>'); return }
     if (req.url === '/panel.html') { res.setHeader('content-type', 'text/html'); res.end(html); return }

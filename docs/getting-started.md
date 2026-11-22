@@ -6,9 +6,9 @@ If you want to know where you left off, you only need the plugin and a local age
 
 1. [Install the plugin](../README.md#install). Open a local agent conversation in Orca, or select one where the agent has already finished a task.
 2. For a quick trial, ask: **“I have six guests and eight chairs. How many chairs will be spare? Answer in one sentence.”** Wait for the answer. Leave the conversation tab selected; you don't have to close it.
-3. Open **Threadbrief** in the right sidebar. Under **Last agent reply**, you should see the agent's answer about the two spare chairs. Switch to a different conversation and the panel follows that selection.
+3. Open **Threadbrief**. With no saved report you’ll see **No report yet**. Expand **Recent messages** to see the answer about the two spare chairs. Choose **Create report…** to turn a milestone into a persistent handoff, or simply leave it as a conversation.
 
-The panel reads the agent’s own words, without starting another model. For example, if an agent reports the work it finished and then confirms delivery, you see the confirmation under **Latest update** and the work under **Earlier in this session**. Threadbrief shows up to three distinct replies from the 48 most recent history entries, newest first, up to 1,600 characters per reply. It skips tool calls and short acknowledgements. This is an excerpt, not a summary of the entire conversation.
+Recent messages are quotes, not a whole-session summary. Threadbrief shows up to three distinct replies from the last 48 history entries, newest first, up to 1,600 characters each. Tool calls and short acknowledgements are skipped. Reading them does not start another model.
 
 No formatting prompt is required. Plain text keeps its line breaks. Markdown replies display headings, lists, tables, emphasis and code; command examples are selectable text, not actions. Web links open through Orca when you click them. File links keep their label and show the path on hover. HTML is displayed as text and remote images are not loaded.
 
@@ -24,9 +24,9 @@ These buttons display existing material, including on a paired server. To ask a 
 
 Use a checkpoint when one task spans many turns. Instead of asking another agent to reread a chat excerpt, ask the agent already doing the work to leave a handoff at a milestone.
 
-1. Load the selected session’s brief first. **Save progress…** appears beside **Refresh** when you are reading an agent reply or a saved checkpoint. Choose **Copy instructions** and paste them into your next regular message in the **original** conversation. Copying sends nothing. That message and the agent’s answer use its normal input and output tokens.
-2. When that turn finishes, click **Save progress… → Save checkpoint** before another reply replaces it. Threadbrief checks the selected server and session, reads up to the 100 most recent entries through Orca, and saves only the block at the end of the latest assistant reply. This does not start an agent. The panel shows **Session handoff · checkpoint N**.
-3. At the next milestone, ask the same agent to update the checkpoint. Each revision is a **complete replacement**: it carries forward relevant decisions and evidence, not the whole transcript. Nothing runs between saves to maintain it. If the agent loses earlier context, use **Copy saved handoff** and paste the snapshot into your next turn.
+1. Load the session. Choose **Create report…** (or **Update report…** for a saved checkpoint), then **Copy instructions**. Paste them into your next regular message in the **original** conversation. They include the previous facts, next revision and your format preference, not the whole transcript. Copying sends nothing. That turn uses the agent’s normal tokens.
+2. Once the agent finishes, choose **Save checkpoint** before its next reply. Threadbrief verifies the host and session and checks the end of the latest finished reply. Only the marked report is saved on this desktop. The panel shows **Session report · revision N**.
+3. At each milestone, repeat with the latest instructions. The new report replaces the previous one, carrying forward decisions and evidence that still apply. Nothing runs between saves. If you started late or cleared the chat, state what is unknown rather than claiming full coverage.
 
 For agents: finish the reply with this fenced JSON block. Use the conversation’s language, one line of text per field (up to 480 characters). Start at revision 1 and increase it on each update. Use “None” for an empty field; do not invent missing history.
 
@@ -42,11 +42,13 @@ Only the latest saved version is kept per server and session, on the desktop sho
 
 | Settings → Recap strategy | What it does | Extra model usage |
 | --- | --- | --- |
-| **Brief recap** (default) | Prepares up to 3,000 characters from the last 12 entries. Asks for goal, outcome and next step in up to 90 words. | One new agent session per confirmed request |
+| **Brief recap** (default) | Choose up to 3,000 characters from the last 12 entries; asks for up to 90 words. | One new agent session per confirmed request |
 | **Instant** | Reads existing text. Use it to pick up where you left off. | None |
-| **Detailed handoff** | Sends up to 12,000 characters from the last 48 entries. Asks for decisions, evidence, loose ends and next steps in up to 400 words. | One new session with a larger input and requested output |
+| **Detailed handoff** | Choose up to 12,000 characters from the last 48 entries; asks for up to 400 words. | One new session with a larger budget |
 
-Open **Settings → Recap strategy and model** to choose an agent installed in the selected workspace, even while a turn is running. Once the conversation finishes, choose **Preview recap request**. Read the destination and the exact prompt, including the excerpt. Tool calls and tool output are left out; ordinary messages may still contain private information. **Start recap in new session** opens a separate agent terminal in that workspace. Select the new terminal to read the answer there or in Threadbrief. The source conversation and its saved report are not changed.
+In **Settings → Recap strategy and model**, choose the agent. After the source turn finishes, click **Choose messages…**. Nothing is preselected. If the saved checkpoint is still visible, only later messages are offered. Otherwise there may be a gap: hand-pick the changes you recognize. Orca does not provide a reliable cursor through the entire session. With no eligible messages, there is nothing to send.
+
+Choose **Preview recap request**. It shows the destination, previous compact facts, formatting instructions, and the exact selected text. Tool calls are excluded, but ordinary messages can contain private data. Only **Start recap in new session** sends the request to the selected agent. To keep its answer, copy the JSON, return to the **original** session, and use **Create report…** or **Update report… → Use a model-written draft**. Saving a draft for a different session or an obsolete revision is refused. A manually written CLI report stays under its writer’s control.
 
 **Choose a model:** keep **Use agent’s default** or pick a named model under **Reported by**. If the list is empty, [ask the agent to register its models](configuration.md#let-an-agent-fill-the-model-picker). **Add a model…** still lets you pin an exact identifier yourself. Check the model and host in the preview. To unpin, choose **Use agent’s default**. In Orca’s plugin settings the same selection is **Preferred recap agent** and **Custom recap model (optional)**. Threadbrief does not retry a rejected launch with a different model.
 
@@ -56,7 +58,9 @@ With the field empty the recap uses the agent’s default model, not necessarily
 
 ## Choose what goes into the recap
 
-By default, the panel quotes recent replies as written. To get a handoff instead, ask the agent before it finishes, or send a follow-up in the same conversation. The gear beside the task title opens **Settings → How to get your first summary → Copy prompt**. Copying does not send a message.
+To choose a lasting layout, open **Settings → Report format** and describe the result in your own words: for example, “Start with a one-line conclusion in French, then a table of options and risks.” Save by leaving the field. Your next checkpoint or separate recap request includes the preference. The panel renders the returned Markdown, with **Facts for the next update** collapsed underneath. Clear the preference to return to the standard layout on the next report. Editing it does not rewrite existing reports or start an agent.
+
+For a one-off request in the original conversation, you can also copy this plain prompt from the gear under **How to get your first summary**. It changes the agent’s reply, not the saved report:
 
 > Sum up this task in my language. Use three short lines: Goal, Done, Next. Mention anything still unresolved. If nothing remains, say so.
 
@@ -77,8 +81,8 @@ The panel shows the first available source, not a blend of conversations:
 | Label in the panel | Whose work it describes |
 | --- | --- |
 | **Saved for this session** | A report explicitly written for this Orca session. It wins even if there is a newer reply. |
-| **Session handoff · checkpoint N** | A snapshot written in the original conversation and saved by you. It does not change when the agent replies again. |
-| **Last agent reply**, or **Latest update** and **Earlier in this session** | Recent replies from the selected session. If the transcript has no usable text, Threadbrief can show the last reply Orca reports for that same finished session. |
+| **Session report · revision N** | A checkpoint or explicitly imported draft saved for this session. A new reply does not overwrite it. |
+| **Recent messages** (under **No report yet**) | Quotes from this session, not the report. If the transcript has no usable text, Threadbrief can show the last reply Orca reports for the same finished session. |
 | **Shared with this worktree** | A saved report for the checkout. It can include other sessions' work; it isn't attributed to the selected agent. |
 
 Turning off **Read recent agent replies** disables history, including manual recap previews. It doesn't delete anything. No history is sent to an agent unless you confirm the preview.
@@ -117,7 +121,7 @@ Skip this if history is enough. Use a saved report for a stable handoff or when 
    ```
 
    For a paired session, add `--environment NAME` after `SESSION_ID`. On success, the writer returns the environment and file path. It keeps the report under `.session-summary` in your home directory, not in the project. Running the writer again for the same session and environment replaces that report.
-4. Select that session. Under **Saved for this session** you should see **Goal**, **Done** and **Next** with the text from the file.
+4. Select that session. Under **Saved for this session** check **Goal**, **Result**, **Confirmation** and **Next**. With no recorded checks, Confirmation says **Not recorded**.
 
 ## If you don't see the result you expected
 

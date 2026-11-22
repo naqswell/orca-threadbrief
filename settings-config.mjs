@@ -10,7 +10,7 @@ export function validateConfig(patch) {
   for (const key of Reflect.ownKeys(patch)) {
     const spec = settings.get(key), value = patch[key]
     if (!spec || typeof value !== spec.type || (spec.enum && !spec.enum.includes(value)) ||
-        (typeof value === 'string' && ((spec.maxLength !== undefined && value.length > spec.maxLength) || /[\u0000-\u001f\u007f]/u.test(value))) ||
+        (typeof value === 'string' && ((spec.maxLength !== undefined && value.length > spec.maxLength) || (key === 'reportFormat' ? /[\u0000-\u0008\u000b-\u001f\u007f]/u : /[\u0000-\u001f\u007f]/u).test(value))) ||
         (key === 'recapEffort' && value && !validEffort(value)) ||
         (key === 'recapModel' && value && (/^-/u.test(value) || /\s/u.test(value)))) {
       throw Error(`Invalid preference: ${String(key)}.`)

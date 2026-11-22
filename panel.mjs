@@ -1,4 +1,5 @@
 import { renderMarkdown } from './summary-markdown.mjs'
+import { checkpointPrompt } from './report-format.mjs'
 
 const api = window.orca
 const main = document.querySelector('main')
@@ -115,16 +116,21 @@ function drawSummary(view, workflow) {
   }
   const header = node('header', undefined, main)
   if (view.title) node('h1', view.title, header)
-  if (view.outcome) {
-    const section = node('section', undefined, main, 'history')
-    node('h2', view.earlierReplies?.length ? 'Latest update' : 'Last agent reply', section)
-    renderMarkdown(node('div', undefined, section), view.outcome, openProseLink)
-    if (view.earlierReplies?.length) {
-      const earlier = node('section', undefined, main, 'history')
-      node('h2', 'Earlier in this session', earlier)
-      for (const reply of view.earlierReplies) renderMarkdown(node('div', undefined, earlier), reply, openProseLink)
+  if (view.scope === 'session' && !view.summary) {
+    const empty = node('section', undefined, main)
+    node('h2', 'No report yet', empty)
+    node('p', 'Keep the goal, result, confirmation and next step together as this session progresses.', empty, 'muted')
+    if (!['historyOff', 'pairedOff', 'unavailable'].includes(view.emptyReason)) {
+      const create = button(empty, 'Create report…', openHandoff)
+      create.disabled = Boolean(view.working)
+      if (view.working) node('small', 'Available when the agent finishes this turn.', empty)
     }
-    return
+    if (view.outcome) {
+      const evidence = node('details', undefined, main, 'history')
+      node('summary', `Recent messages (${1 + (view.earlierReplies?.length ?? 0)})`, evidence)
+      for (const reply of [view.outcome, ...(view.earlierReplies ?? [])]) renderMarkdown(node('div', undefined, evidence), reply, openProseLink)
+      return
+    }
   }
   const summary = view.summary
   if (!summary) {
@@ -140,8 +146,14 @@ function drawSummary(view, workflow) {
     return
   }
   const cp = summary.checkpoint
-  node('p', cp ? `Session handoff · checkpoint ${cp.revision}` : view.scope === 'worktree' ? 'Shared with this worktree' : 'Saved for this session', header, 'muted')
-  fields(header, [['Goal', summary.goal], ['Done', summary.done], ['Decisions', cp?.decisions], ['Checks', cp?.checks], ['Open questions', cp?.open], ['Next', summary.next]])
+  node('p', cp ? `Session report · revision ${cp.revision}` : view.scope === 'worktree' ? 'Shared with this worktree' : 'Saved for this session', header, 'muted')
+  let facts = header
+  if (cp?.formatted) {
+    renderMarkdown(node('div', undefined, header), cp.formatted, openProseLink)
+    facts = node('details', undefined, header)
+    node('summary', 'Facts for the next update', facts)
+  }
+  fields(facts, [['Goal', summary.goal], ['Result', summary.done], ['Confirmation', cp?.checks ?? summary.result?.checks ?? 'Not recorded'], ['Next', summary.next], ['Decisions', cp?.decisions === 'None' ? undefined : cp?.decisions], ['Open questions', cp?.open === 'None' ? undefined : cp?.open]])
   if (cp) button(header, 'Copy saved handoff', event => run(event.currentTarget, () => {
     const { goal, done, next } = summary
     return copyText(JSON.stringify({ goal, done, next, ...cp }, null, 2))
@@ -150,9 +162,9 @@ function drawSummary(view, workflow) {
   if (result) {
     const section = node('section', undefined, main, `result ${result.status === 'blocked' ? 'blocked' : ''}`)
     const heading = node('div', undefined, section, 'result-head')
-    node('h2', 'Result', heading)
+    node('h2', 'Result details', heading)
     if (result.status) node('span', ({ completed: 'Completed', partial: 'Partial', blocked: 'Blocked' })[result.status] || result.status, heading)
-    fields(section, [['Changes', result.changes], ['Checks', result.checks], ['Limits', result.limits]])
+    fields(section, [['Changes', result.changes], ['Limits', result.limits]])
     links(section, result.links, workflow?.state === 'review')
     if (result.questions?.length) {
       const questions = node('section', undefined, main, 'attention')
@@ -324,27 +336,30 @@ async function refresh(leaving = false, apply = true, loadFor) {
     const welcome = view.scope === 'manual'
     manualLoad.hidden = !welcome || !manualKey
     refreshBrief.hidden = welcome || view.scope === 'excluded' || (view.scope === 'none' && !manualKey)
-    handoffControl.hidden = view.scope !== 'session' || !(view.outcome || view.summary?.checkpoint)
+    handoffControl.hidden = view.scope !== 'session' || !view.summary?.checkpoint
+    handoffButton.disabled = Boolean(working)
     activity.hidden = !working || view.manual
-    sourceHint = working && !view.manual ? 'Choose an agent now. Preview is available when this turn finishes.' :
+    sourceHint = working ? 'Choose an agent now. Preview is available when this turn finishes.' :
       view.scope === 'excluded' ? 'Summaries are off for this selection.' :
       view.emptyReason === 'pairedOff' ? 'Turn on paired session history to preview a recap.' :
       view.scope === 'none' ? 'Select a finished agent conversation to preview a recap.' : ''
     updatePreviewControl()
-    const key = JSON.stringify([view, workflow, workflowResult.error?.message, original?.key && dirtyDrafts.has(original.key)])
+    const key = JSON.stringify([view, !view.summary && working, workflow, workflowResult.error?.message, original?.key && dirtyDrafts.has(original.key)])
     if (key === rendered && contextKey === displayedContext) { pendingUpdate(false); return }
     if (!apply && !leaving && displayedContext === contextKey && view.scope !== 'excluded' && holdUpdate()) {
       pendingUpdate(true)
       return
     }
     pendingUpdate(false)
+    const keepEvidenceOpen = displayedContext === contextKey && main.querySelector('details.history')?.open
     displayedContext = contextKey
     hasBrief = Boolean(view.summary || view.outcome)
     const editor = main.querySelector('details[data-draft-key]')
     const openKey = editor?.open ? editor.dataset.draftKey : null
     rendered = key
     main.replaceChildren()
-    drawSummary(view, workflow)
+    drawSummary({ ...view, working }, workflow)
+    if (keepEvidenceOpen && main.querySelector('details.history')) main.querySelector('details.history').open = true
     drawWorkflow(workflow, original?.key)
     if (workflowResult.error) node('p', message(workflowResult.error, 'Could not load workflow actions.'), main)
     const nextEditor = main.querySelector('details[data-draft-key]')
@@ -476,7 +491,7 @@ async function loadPreferences() {
     for (const group of preferenceGroups) {
       for (const field of group.elements) {
         if (field.type === 'checkbox') field.checked = values[field.name] === true
-        else field.value = values[field.name] ?? (field.name === 'summaryStrategy' ? 'brief' : '')
+        else if (field !== document.activeElement || field.name !== 'reportFormat') field.value = values[field.name] ?? (field.name === 'summaryStrategy' ? 'brief' : '')
       }
       group.disabled = false
     }
@@ -491,6 +506,9 @@ async function loadPreferences() {
 const recapSettings = document.querySelector('#recap-settings')
 const recapAgent = document.querySelector('#recap-agent'), recapStatus = document.querySelector('#recap-status')
 const previewRecap = document.querySelector('#preview-recap'), startRecap = document.querySelector('#start-recap')
+const evidenceBox = document.querySelector('#recap-evidence'), evidenceList = document.querySelector('#evidence-list')
+const confirmEvidence = document.querySelector('#confirm-evidence')
+let evidenceToken
 let recapRevision = 0, recapToken, previousMode
 const agentHint = document.querySelector('#agent-hint')
 const modelInput = document.querySelector('#recap-model'), modelForm = document.querySelector('#recap-model-form')
@@ -511,6 +529,10 @@ function updatePreviewControl() {
 function clearRecap() {
   ++recapRevision
   recapToken = undefined
+  evidenceToken = undefined
+  evidenceBox.hidden = true
+  evidenceList.replaceChildren()
+  confirmEvidence.disabled = true
   document.querySelector('#recap-preview').hidden = true
   document.querySelector('#recap-text').textContent = recapStatus.textContent = ''
 }
@@ -520,7 +542,7 @@ async function showStrategy(values, revision) {
   const instant = mode === 'instant'
   document.querySelector('#recap-mode-label').textContent = instant ? 'Instant' : mode === 'brief' ? 'Brief' : 'Detailed'
   document.querySelector('#strategy-hint').textContent = instant ? 'Shows existing text. No extra tokens or agent session.' :
-    `${mode === 'brief' ? 'Up to 12 recent entries and 3,000 characters; asks for up to 90 words.' : 'Up to 48 recent entries and 12,000 characters; asks for up to 400 words.'} Applies when you start a new recap, not when you refresh the brief. Your agent’s usual pricing applies.`
+    `${mode === 'brief' ? 'Choose up to 3,000 characters from the last 12 entries; asks for up to 90 words.' : 'Choose up to 12,000 characters from the last 48 entries; asks for up to 400 words.'} Only the previous report and the messages you select go in the request. Your agent’s usual pricing applies.`
   document.querySelector('#recap-controls').hidden = instant
   if (instant || !dialog.open || !recapSettings.open) return
   const storedModel = (values.recapModel ?? '').trim()
@@ -630,14 +652,38 @@ previewRecap.addEventListener('click', async () => {
   recapPending = true
   updatePreviewControl()
   try {
-    const p = await request('recap.preview', { agent: recapAgent.value })
+    const data = await request('recap.evidence', { agent:recapAgent.value })
+    if (revision !== recapRevision) return
+    evidenceToken = data.token
+    document.querySelector('#evidence-hint').textContent = !data.choices.length ? 'No eligible messages here. Nothing to send.' : data.matched ? 'Choose what changed since the visible checkpoint.' : data.hasReport ? 'The previous checkpoint is not visible. History may have gaps. Select only changes you can confirm.' : 'Choose the facts for the first report. Only recent messages are available.'
+    for (const [index, choice] of data.choices.entries()) {
+      const row = node('label', undefined, evidenceList, 'evidence-choice')
+      const input = node('input', undefined, row)
+      input.type = 'checkbox'; input.value = String(index)
+      node('span', `${choice.role === 'user' ? 'You' : 'Agent'} · ${choice.chars.toLocaleString()} chars · ${choice.excerpt}`, row)
+    }
+    evidenceBox.hidden = false
+  } catch (error) { if (revision === recapRevision) recapStatus.textContent = message(error, 'Could not load messages.') }
+  finally { recapPending = false; updatePreviewControl() }
+})
+evidenceList.addEventListener('change', () => {
+  ++recapRevision
+  recapToken = undefined
+  document.querySelector('#recap-preview').hidden = true
+  confirmEvidence.disabled = !evidenceList.querySelector(':checked')
+})
+confirmEvidence.addEventListener('click', async () => {
+  const revision = ++recapRevision
+  const selected = [...evidenceList.querySelectorAll(':checked')].map(input => Number(input.value))
+  try {
+    const p = await request('recap.preview', { token:evidenceToken, selected })
     if (revision !== recapRevision) return
     recapToken = p.token
     document.querySelector('#recap-destination').textContent = `${p.title} → ${p.agent} / ${p.model || 'Agent default'} on ${p.environment} · Effort: ${p.effort || 'Agent default'} · ${p.prompt.length.toLocaleString()} characters including instructions`
     document.querySelector('#recap-text').textContent = p.prompt
     document.querySelector('#recap-preview').hidden = false
   } catch (error) { if (revision === recapRevision) recapStatus.textContent = message(error, 'Could not preview recap.') }
-  finally { recapPending = false; updatePreviewControl() }
+  finally { if (revision === recapRevision && recapToken) recapStatus.textContent = '' }
 })
 startRecap.addEventListener('click', async () => {
   const token = recapToken
@@ -648,7 +694,7 @@ startRecap.addEventListener('click', async () => {
   try {
     const { focused } = await request('recap.start', { token })
     if (focused && dialog.open) dialog.close()
-    else recapStatus.textContent = 'Recap session started. Select the new agent terminal to read its reply.'
+    else recapStatus.textContent = 'Recap session started. To keep its draft, copy the JSON and return to the source session → Create or Update report → Use a model-written draft.'
   } catch (error) { recapStatus.textContent = message(error, 'Check Orca for a new agent session before trying again.') }
   finally { startRecap.disabled = recapPending = false; updatePreviewControl() }
 })
@@ -666,7 +712,8 @@ dialog.addEventListener('change', async ({ target }) => {
   }
 })
 api.settings.onDidChange(({ key }) => {
-  if (key === 'recapAgent' || key === 'recapModel' || key === 'recapEffort') clearRecap()
+  if (['recapAgent','recapModel','recapEffort','reportFormat'].includes(key)) clearRecap()
+  if (key === 'reportFormat' && handoff.open) handoff.close()
   if (dialog.open || key === 'showPanelIcon' || key === 'pauseWhileReading') void loadPreferences()
 })
 api.storage.onDidChange(({ key }) => {
@@ -728,36 +775,52 @@ document.addEventListener('keydown', event => { if (event.key === 'Escape') hand
 let handoffVisit = 0, checkpointKey
 handoff.addEventListener('close', () => { ++handoffVisit; checkpointKey = undefined })
 document.querySelector('#close-handoff').addEventListener('click', () => handoff.close())
-handoffButton.addEventListener('click', async () => {
+const draftInput = document.querySelector('#report-draft'), importDraft = document.querySelector('#import-draft')
+function draftReady() { importDraft.disabled = !checkpointKey || !draftInput.value.trim() }
+draftInput.addEventListener('input', draftReady)
+handoffButton.addEventListener('click', openHandoff)
+async function openHandoff() {
   handoffHint.hidden = true
   const visit = ++handoffVisit
   checkpointKey = undefined
   checkpointStatus.textContent = ''
+  draftInput.value = ''
+  draftReady()
+  document.querySelector('#copy-checkpoint').disabled = true
+  document.querySelector('#checkpoint-prompt').textContent = ''
   checkpointTarget.textContent = 'Checking selected session…'
   saveCheckpoint.disabled = true
   handoff.showModal()
   try {
     const target = await request('checkpoint.target')
     if (visit !== handoffVisit || !handoff.open) return
+    if (target.manual) throw Error('This report is maintained by its writer. It cannot be replaced here.')
     checkpointKey = target.key
     checkpointTarget.textContent = `${target.title} · ${target.environment === 'local' ? 'This desktop' : 'Paired server'}`
+    document.querySelector('#checkpoint-prompt').textContent = checkpointPrompt(target)
+    document.querySelector('#copy-checkpoint').disabled = false
+    draftReady()
     saveCheckpoint.disabled = false
-  } catch (error) { if (visit === handoffVisit) checkpointTarget.textContent = message(error, 'Select a finished session with history enabled, then open Save progress again.') }
-})
+  } catch (error) { if (visit === handoffVisit) checkpointTarget.textContent = message(error, 'Select a finished session with history enabled, then reopen the report.') }
+}
 document.querySelector('#copy-checkpoint').addEventListener('click', event => run(event.currentTarget,
   () => copyText(document.querySelector('#checkpoint-prompt').textContent), 'Copied. Paste into the original conversation.', 'Could not copy.', checkpointStatus))
-saveCheckpoint.addEventListener('click', async () => {
+saveCheckpoint.addEventListener('click', () => persistReport(false))
+importDraft.addEventListener('click', () => persistReport(true))
+async function persistReport(importing) {
   if (!checkpointKey) return
   const visit = handoffVisit, key = checkpointKey, loadFor = manualKey
-  saveCheckpoint.disabled = true
+  saveCheckpoint.disabled = importDraft.disabled = true
   try {
-    const { revision } = await request('checkpoint.capture', { key })
+    const { revision } = importing ? await request('checkpoint.import', { key, draft:draftInput.value.trim() }) : await request('checkpoint.capture', { key })
     if (visit !== handoffVisit) return
-    checkpointStatus.textContent = `Checkpoint ${revision} saved on this desktop.`
+    checkpointKey = undefined
+    document.querySelector('#copy-checkpoint').disabled = true
+    checkpointStatus.textContent = `Revision ${revision} saved on this desktop.`
     if (loadFor === manualKey) await refresh(false, true, loadFor)
   } catch (error) { if (visit === handoffVisit) checkpointStatus.textContent = message(error, 'Not saved.') }
-  finally { if (visit === handoffVisit) saveCheckpoint.disabled = false }
-})
+  finally { if (visit === handoffVisit) { saveCheckpoint.disabled = !checkpointKey; draftReady() } }
+}
 recapSettings.addEventListener('toggle', () => {
   if (recapSettings.open && dialog.open) void loadPreferences()
   else clearRecap()

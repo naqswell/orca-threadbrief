@@ -55,6 +55,11 @@ export function summary(value) {
     const { revision, decisions, checks, open } = value.checkpoint ?? {}
     if (!Number.isSafeInteger(revision) || revision < 1 || !text(decisions) || !text(checks) || !text(open)) throw Error('Invalid session checkpoint.')
     out.checkpoint = { revision, decisions, checks, open }
+    const formatted = value.checkpoint.formatted
+    if (formatted !== undefined) {
+      if (typeof formatted !== 'string' || !formatted.trim() || formatted.length > 2400 || /[\u0000-\u0008\u000b-\u001f\u007f]/u.test(formatted) || /^(?:…|\.\.\.)$/u.test(formatted.trim())) throw Error('Invalid formatted report.')
+      out.checkpoint.formatted = formatted
+    }
   }
   if (typeof value.dispatch === 'string' && /^[\w-]{1,128}$/u.test(value.dispatch)) out.dispatch = value.dispatch
   if (value.result !== undefined) {

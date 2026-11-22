@@ -2,6 +2,11 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { bindSources } from '../sources.mjs'
 import { bindRecaps } from '../recaps.mjs'
+const base = async () => ({key:'peer-source', revision:0, fields:null})
+async function previewOne(handlers, agent) {
+  const {token} = await handlers['recap.evidence']({agent})
+  return handlers['recap.preview']({token, selected:[0]})
+}
 
 test('paired history and generation target only the confirmed peer; disconnect, ID mismatch, exclusion and opt-out never use a local agent', async t => {
   const workspaceId = 'folder:room', handlers = {}, calls = [], rules = new Map()
@@ -20,13 +25,13 @@ test('paired history and generation target only the confirmed peer; disconnect, 
   }
   const settings = async () => ({ pairedHistory: enabled, summaryStrategy: 'brief' })
   const sources = bindSources(orca, { settings, command, focus, roots: [], reveal() {} }); t.after(sources.stop)
-  bindRecaps(orca, { settings, command, target: sources.recapTarget, source: sources.recapSource })
+  bindRecaps(orca, { settings, command, base, target: sources.recapTarget, source: sources.recapSource })
   assert.equal((await sources.focused()).outcome, 'The peer outcome.')
-  const preview = await handlers['recap.preview']({ agent: 'remote-agent' })
+  const preview = await previewOne(handlers, 'remote-agent')
   assert.equal(preview.environment, 'peer')
   await handlers['recap.start'](preview)
   assert.deepEqual(calls.at(-1), ['agent','launch','--environment','peer','--worktree',workspaceId,'--agent','remote-agent','--surface','terminal','--prompt',preview.prompt])
-  const revoked = await handlers['recap.preview']({ agent: 'remote-agent' })
+  const revoked = await previewOne(handlers, 'remote-agent')
   calls.length = 0; online = false
   assert.equal((await sources.focused()).emptyReason, 'unavailable')
   await assert.rejects(handlers['recap.start'](revoked))
@@ -41,7 +46,7 @@ test('paired history and generation target only the confirmed peer; disconnect, 
   assert.deepEqual(calls, [])
   assert.deepEqual((await handlers['recap.agents']()).map(a => a.id), ['remote-agent'])
   assert.deepEqual(calls, [['agent', 'installed', '--environment', 'peer', '--worktree', workspaceId]])
-  await assert.rejects(handlers['recap.preview']({ agent: 'remote-agent' }), /off/)
+  await assert.rejects(previewOne(handlers, 'remote-agent'), /off/)
   assert.ok(calls.every(c => c[1] === 'installed'))
 })
 
@@ -73,12 +78,12 @@ test('changing selection, strategy or history access during a paired lookup canc
   const settings = async () => ({ summaryStrategy: strategy, pairedHistory: allowed })
   const sources = bindSources(orca, { settings, command, focus, roots: [] })
   t.after(sources.stop)
-  bindRecaps(orca, { settings, command, target: sources.recapTarget, source: sources.recapSource })
-  const preview = await handlers['recap.preview']({ agent: 'writer' })
+  bindRecaps(orca, { settings, command, base, target: sources.recapTarget, source: sources.recapSource })
+  const preview = await previewOne(handlers, 'writer')
   duringLookup = () => { leaf = 'second' }
   await assert.rejects(handlers['recap.start'](preview), /selection changed/)
   duringLookup = () => {}
-  const next = await handlers['recap.preview']({ agent: 'writer' })
+  const next = await previewOne(handlers, 'writer')
   duringLookup = () => { strategy = 'instant' }
   await assert.rejects(handlers['recap.start'](next), /Select Brief/)
   const before = reads
