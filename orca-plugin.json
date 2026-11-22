@@ -2,7 +2,7 @@
   "manifestVersion": 2,
   "id": "session-summary",
   "name": "Threadbrief",
-  "version": "0.1.0",
+  "version": "0.2.2",
   "icon": "assets/session-summary.png",
   "cover": { "path": "assets/threadbrief-cover.png", "alt": "Threadbrief: a mint thread leads to a stack of notes labeled Goal, Done and Next." },
   "description": "Pick up where your agent left off. Read its last reply or a saved handoff with the goal, result and next step.",
@@ -12,7 +12,7 @@
   "execution": "trusted-worker",
   "main": "worker.mjs",
   "capabilities": [
-    { "kind": "workspace:read" }, { "kind": "agent:read" },
+    { "kind": "workspace:read" }, { "kind": "agent:read" }, { "kind": "agent:launch" },
     { "kind": "settings:own" }, { "kind": "storage:own" },
     { "kind": "workspace:write" }, { "kind": "terminal:send" }
   ],
@@ -22,8 +22,12 @@
     "statusBarItems": [{ "id": "summary-observer" }],
     "settings": [
       { "key": "showPanelIcon", "title": "Show the plugin icon", "description": "Show the plugin mark on the settings gear. The sidebar tab is unchanged.", "type": "boolean", "default": true },
-      { "key": "historyOutcome", "title": "Use the agent’s last reply", "description": "When a local session finishes without a saved summary, show the reply from its history.", "type": "boolean", "default": true },
+      { "key": "historyOutcome", "title": "Use the agent’s last reply", "description": "Show a completed session’s reply when no saved report is available.", "type": "boolean", "default": true },
+      { "key": "pairedHistory", "title": "Read paired session history", "description": "Allow Threadbrief to read the selected session from its paired Orca server. Recap requests stay on that server.", "type": "boolean", "default": true },
+      { "key": "summaryStrategy", "title": "Recap strategy", "description": "Instant uses saved text. Brief and Detailed let you preview a prompt and start a separate Orca agent only when you choose.", "type": "string", "default": "instant", "enum": ["instant", "brief", "handoff"], "enumLabels": ["Instant · no model call", "Brief recap", "Detailed handoff"] },
+      { "key": "recapAgent", "title": "Preferred recap agent", "description": "The installed Orca agent selected in Threadbrief. Empty uses Orca’s default.", "type": "string", "default": "" },
       { "key": "autoOpen", "title": "Open for new worktrees", "description": "Open the panel only when the new worktree has a saved summary.", "type": "boolean", "default": false },
+      { "key": "pauseWhileReading", "title": "Pause updates while reading", "description": "Keep the displayed brief while you read it. Turn off to show each new result immediately, even when the panel has focus.", "type": "boolean", "default": true },
       { "key": "profileActions", "title": "Show profile commands", "description": "Show optional workflow actions for projects that match an enabled profile. This does not affect summaries.", "type": "boolean", "default": false },
       { "key": "commandAction", "title": "Profile commands: show first", "description": "Choose the first button shown for a profile command. Both buttons remain available. Neither runs the command.", "type": "string", "default": "copy", "enum": ["copy", "terminal"], "enumLabels": ["Copy command", "Open terminal"] }
     ]

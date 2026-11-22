@@ -23,7 +23,7 @@ function argvValid(argv, opener = false) {
       argv.filter(arg => arg === '{url}').length === 1 && argv.every(arg => !substitutions.has(arg) || arg === '{url}')))
 }
 
-function validate(profile) {
+export function validate(profile) {
   if (!profile || typeof profile !== 'object' || Array.isArray(profile) ||
       !/^[A-Za-z0-9_-]{1,128}$/u.test(profile.id ?? '') || !line(profile.name, 200) ||
       typeof profile.enabled !== 'boolean' || !line(profile.projectPrefix, 1024) ||
@@ -93,7 +93,7 @@ export function bindProfiles(orca, { settings, focused }) {
     if (!line(projectPrefix, 1024)) throw Error('Enter a project prefix.')
     return projects(projectPrefix)
   })
-  orca.panels.handle('profiles.save', async ({profile, trustOpener = false} = {}) => {
+  const save = async ({profile, trustOpener = false} = {}) => {
     const checked = validate(profile)
     if (typeof trustOpener !== 'boolean' || (trustOpener && !checked.openReview)) throw Error('Invalid opener approval.')
     return update((profiles, trust) => {
@@ -103,7 +103,8 @@ export function bindProfiles(orca, { settings, focused }) {
       if (index < 0) profiles.push(checked); else profiles[index] = checked
       return {profile:checked}
     })
-  })
+  }
+  orca.panels.handle('profiles.save', save)
   orca.panels.handle('profiles.delete', async ({id} = {}) => update((profiles, trust) => {
     delete trust[id]
     const index = profiles.findIndex(p => p.id === id)
@@ -114,6 +115,7 @@ export function bindProfiles(orca, { settings, focused }) {
   async function view(draft) {
     const context = await host.call('workspace.readContext')
     const selection = await focused()
+    if (selection?.scope === 'excluded') return {state:'none'}
     const summary = selection?.summary
     const bareReview = knownReview(summary)
     const none = bareReview ? {state:'review', review:{...bareReview, custom:false}} : {state:'none'}
@@ -205,4 +207,8 @@ export function bindProfiles(orca, { settings, focused }) {
     await run(argv[0], argv.slice(1), {timeout:15000, maxBuffer:16384, windowsHide:true})
     return {message:'Review opener started.'}
   })
+  return async (profile, enable) => {
+    await save({profile: {...profile, enabled: enable}})
+    if (enable) await host.call('settings.set', { key: 'profileActions', value: true })
+  }
 }

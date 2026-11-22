@@ -16,7 +16,7 @@ export function orcaDataPath(env = process.env, os = platform(), home = homedir(
 export async function orcaJson(args) {
   let stdout
   const executable = process.env.ORCA_CLI_COMMAND || (process.env.ORCA_DEV_REPO_ROOT ? 'orca-dev' : platform() === 'linux' ? 'orca-ide' : platform() === 'win32' ? 'orca.exe' : 'orca')
-  try { ({ stdout } = await exec(executable, [...args, '--json'], { timeout: 4000, maxBuffer: 4 * 1024 * 1024 })) }
+  try { ({ stdout } = await exec(executable, [...args, '--json'], { timeout: args[0] === 'agent' && args[1] === 'launch' ? 28000 : 8000, maxBuffer: 4 * 1024 * 1024 })) }
   catch (error) { if (error.code !== 1 || !error.stdout) throw error; stdout = error.stdout }
   const response = JSON.parse(stdout)
   if (response.ok) return response.result

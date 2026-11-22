@@ -102,6 +102,12 @@ async function showFrame(parent, label, title, id, hash) {
   } catch { if (box.isConnected) box.textContent = 'Image unavailable.' }
 }
 function drawSummary(view, workflow) {
+  if (view.scope === 'excluded') {
+    node('h2', 'Summaries are off', main)
+    node('p', view.excluded === 'unverified' ? 'Orca could not confirm whether this selection is excluded. Its reports and history were not read.' : `This ${view.excluded} is excluded. Its reports and history were not read.`, main)
+    button(main, 'Manage exclusions', () => { exclusionsPanel.open = true; openSettings() }).className = 'guide-link'
+    return
+  }
   const header = node('header', undefined, main)
   if (view.title) node('h1', view.title, header)
   if (view.outcome) {
@@ -113,12 +119,13 @@ function drawSummary(view, workflow) {
   const summary = view.summary
   if (!summary) {
     const hints = {
-      waiting: 'The agent is still working. Its reply will appear here when this local session finishes.',
-      historyOff: 'There is no saved summary for this session. Turn on “Use the agent’s last reply” to include local history.',
-      paired: 'This session is on a paired environment. Save a session summary to see it here; history is local only.',
+      waiting: 'No completed reply yet. The first one will appear here when this turn finishes.',
+      historyOff: 'No saved session report. Turn on “Use the agent’s last reply” to read its history.',
+      pairedOff: 'Paired history is off. Enable it in Settings or save a session report.',
+      unavailable: 'Could not verify this session on its paired server. Check the connection or use a saved report.',
       noReply: 'No reply is available from this session’s history yet. Ask the agent for a short recap.'
     }
-    node('p', hints[view.emptyReason] || 'Select a local agent tab in Orca to see its summary.', main, 'empty-hint')
+    node('p', hints[view.emptyReason] || 'Select an agent tab in Orca to see its summary.', main, 'empty-hint')
     button(main, 'How summaries work', () => openSettings(true)).className = 'guide-link'
     return
   }
@@ -228,25 +235,79 @@ function drawWorkflow(workflow, draftKey) {
   }
 }
 const loading = document.querySelector('#loading')
-let draftFocus
-function showLoading() {
-  if (main.hidden) return
-  const field = document.activeElement
-  const editor = field?.closest('details[data-draft-key]')
-  draftFocus = field?.dataset.draftField && editor
-    ? { key: editor.dataset.draftKey, name: field.dataset.draftField, start: field.selectionStart, end: field.selectionEnd } : null
-  main.hidden = true
-  main.setAttribute('aria-busy', 'true')
-  status.textContent = ''
-  loading.hidden = false
+const outgoing = document.querySelector('#outgoing')
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)')
+let draftFocus, loadTimer, loaderSince, oldMotion
+function clearOutgoing() {
+  oldMotion?.cancel()
+  oldMotion = undefined
+  outgoing.hidden = true
+  outgoing.replaceChildren()
 }
-async function refresh() {
+function retire() {
+  if (main.hidden || !main.firstChild) return
+  clearOutgoing()
+  outgoing.append(...main.childNodes)
+  outgoing.hidden = false
+  main.hidden = true
+  rendered = undefined
+  if (!reducedMotion.matches) oldMotion = outgoing.animate([{ opacity: 1 }, { opacity: .48, filter: 'blur(3px)' }], { duration: 115, fill: 'forwards', easing: 'ease-out' })
+}
+function fadeOutgoing() {
+  if (outgoing.hidden) return
+  if (reducedMotion.matches) { clearOutgoing(); return }
+  const { opacity, filter } = getComputedStyle(outgoing)
+  oldMotion?.cancel()
+  oldMotion = outgoing.animate([{ opacity, filter }, { opacity: 0, filter: 'blur(4px)' }], { duration: 145, fill: 'forwards', easing: 'ease-out' })
+  oldMotion.onfinish = clearOutgoing
+}
+function showLoading(leaving = false) {
+  if (main.getAttribute('aria-busy') !== 'true') {
+    const field = document.activeElement
+    const editor = field?.closest('details[data-draft-key]')
+    draftFocus = field?.dataset.draftField && editor
+      ? { key: editor.dataset.draftKey, name: field.dataset.draftField, start: field.selectionStart, end: field.selectionEnd } : null
+    main.setAttribute('aria-busy', 'true')
+    status.textContent = ''
+  }
+  if (leaving) retire()
+  if (main.hidden && loaderSince === undefined && loadTimer === undefined) {
+    loadTimer = setTimeout(() => {
+      loadTimer = undefined
+      loaderSince = performance.now()
+      loading.setAttribute('aria-hidden', 'false')
+      fadeOutgoing()
+    }, 150)
+  }
+}
+const activity = document.querySelector('#agent-working'), refreshBrief = document.querySelector('#refresh-brief')
+let displayedContext, hasBrief = false, pointerReading = false
+let pauseWhileReading = true
+main.addEventListener('wheel', () => { pointerReading = true }, { passive: true })
+main.addEventListener('pointerdown', () => { pointerReading = true })
+main.addEventListener('pointerleave', () => { pointerReading = false })
+const reading = () => document.hasFocus() || pointerReading || !window.getSelection()?.isCollapsed
+const holdUpdate = () => pauseWhileReading && hasBrief && (reading() || !refreshBrief.hidden)
+function resetReader() {
+  displayedContext = undefined
+  hasBrief = pointerReading = false
+  activity.hidden = refreshBrief.hidden = true
+}
+refreshBrief.addEventListener('click', async () => {
+  const before = window.scrollY, context = displayedContext
+  await refresh(false, true)
+  if (context === displayedContext && refreshBrief.hidden) {
+    main.focus({ preventScroll: true })
+    window.scrollTo(0, before)
+  }
+})
+async function refresh(leaving = false, apply = true) {
   if (document.hidden) return
   const ticket = ++generation
-  showLoading()
+  showLoading(leaving)
   listening = true
   try {
-    const [view, workflowResult] = await Promise.all([
+    const [result, workflowResult] = await Promise.all([
       request('summary.focused', { listen: true }),
       request('workflow.view').then(value => ({ value }), error => ({ error }))
     ])
@@ -257,11 +318,21 @@ async function refresh() {
       catch (error) { workflowResult.error = error; workflow = null }
     }
     if (ticket !== generation || document.hidden) return
+    const { working, contextKey, ...view } = result
+    activity.hidden = !working
     const key = JSON.stringify([view, workflow, workflowResult.error?.message, original?.key && dirtyDrafts.has(original.key)])
-    if (key === rendered) return
-    rendered = key
+    if (key === rendered) { refreshBrief.hidden = true; return }
+    if (!apply && !leaving && displayedContext === contextKey && view.scope !== 'excluded' && holdUpdate()) {
+      refreshBrief.hidden = false
+      return
+    }
+    refreshBrief.hidden = true
+    displayedContext = contextKey
+    hasBrief = Boolean(view.summary || view.outcome)
     const editor = main.querySelector('details[data-draft-key]')
     const openKey = editor?.open ? editor.dataset.draftKey : null
+    if (!main.hidden && !openKey) retire()
+    rendered = key
     main.replaceChildren()
     drawSummary(view, workflow)
     drawWorkflow(workflow, original?.key)
@@ -270,14 +341,28 @@ async function refresh() {
     if (nextEditor?.dataset.draftKey === openKey) nextEditor.open = true
   } catch (error) {
     if (ticket !== generation || document.hidden) return
+    if (!leaving && !apply && holdUpdate()) { refreshBrief.hidden = false; return }
     rendered = undefined
     main.replaceChildren()
     node('p', message(error, 'Could not load summary.'), main)
   } finally {
     if (ticket === generation && !document.hidden) {
+      clearTimeout(loadTimer)
+      loadTimer = undefined
+      if (loaderSince !== undefined) {
+        const hold = 220 - (performance.now() - loaderSince)
+        if (hold > 0) await new Promise(resolve => setTimeout(resolve, hold))
+        if (ticket !== generation || document.hidden) return
+      }
+      loaderSince = undefined
+      main.inert = false
       main.setAttribute('aria-busy', 'false')
-      main.hidden = false
-      loading.hidden = true
+      if (main.hidden) {
+        main.hidden = false
+        if (!reducedMotion.matches) main.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 145, easing: 'ease-out' })
+      }
+      loading.setAttribute('aria-hidden', 'true')
+      fadeOutgoing()
       if (draftFocus && document.activeElement === document.body) {
         const editor = main.querySelector('details[data-draft-key]')
         if (editor?.dataset.draftKey === draftFocus.key) {
@@ -293,11 +378,25 @@ async function refresh() {
 }
 function pause() {
   generation++
-  showLoading()
+  clearTimeout(loadTimer)
+  loadTimer = undefined
+  retire()
+  resetReader()
+  loaderSince = undefined
+  loading.setAttribute('aria-hidden', 'true')
+  main.setAttribute('aria-busy', 'true')
   if (listening) { listening = false; void request('summary.closed').catch(() => {}) }
 }
-api.plugin.on('summary.changed', () => void refresh())
-api.on('workspace.changed', () => void refresh())
+api.plugin.on('summary.changed', ({ reason } = {}) => {
+  const privateChange = reason === 'exclusions' || reason === 'history-setting'
+  const leaving = reason === 'workspace' || reason === 'selection' || privateChange
+  if (leaving) resetReader()
+  if (privateChange) { main.replaceChildren(); main.hidden = true; rendered = undefined; clearOutgoing() }
+  if (leaving || reason === 'session' || reason === 'settings') clearRecap()
+  void refresh(leaving, false)
+  if (leaving && dialog.open) void loadPreferences()
+  if (dialog.open && exclusionsPanel.open && (leaving || reason === 'session')) void loadExclusions()
+})
 document.addEventListener('visibilitychange', () => { if (document.hidden) pause(); else void refresh() })
 window.addEventListener('pagehide', pause, { once: true })
 
@@ -331,7 +430,7 @@ function editProfile(profile, isImported = false) {
   form.elements.enabled.disabled = isImported
   form.elements.projectPrefix.value = profile.projectPrefix || ''
   form.elements.excludeBranchPrefix.value = profile.excludeBranchPrefix || ''
-  form.elements.reviewHost.value = profile.reviewHost || ''
+  form.elements.reviewHost.value = profile.reviewHost || 'github.com'
   form.elements.shell.value = profile.shell || 'posix'
   form.elements.openReview.value = (profile.openReview || []).join('\n')
   form.elements.trustOpener.checked = false
@@ -339,6 +438,8 @@ function editProfile(profile, isImported = false) {
   document.querySelector('#import-trust-note').hidden = !isImported
   document.querySelector('#profile-form-title').textContent = isImported ? 'Import profile' : profile.name ? 'Edit profile' : 'New profile'
   for (const step of profile.steps || []) addStep(step)
+  document.querySelector('#advanced-profile').open = false
+  void previewProjects()
   form.hidden = false
   form.elements.name.focus()
 }
@@ -348,18 +449,8 @@ async function listProfiles() {
     const result = await request('profiles.list')
     list.replaceChildren()
     const available = document.querySelector('#available-projects')
-    available.replaceChildren()
-    if (result.projects?.length) {
-      const list = node('ul', undefined, available)
-      for (const project of result.projects) {
-        const item = node('li', undefined, list)
-        button(item, `${project.name} (${project.id})`, () => {
-          form.elements.projectPrefix.value = project.id
-          form.elements.projectPrefix.dispatchEvent(new Event('input'))
-          form.elements.projectPrefix.focus()
-        })
-      }
-    }
+    available.replaceChildren(new Option('Choose a project…', ''), ...(result.projects || []).map(p => new Option(p.name, p.id)))
+    available.value = form.elements.projectPrefix.value
     for (const profile of result.profiles) {
       const entry = node('div', undefined, list, 'profile-entry')
       node('strong', profile.name, entry)
@@ -380,6 +471,9 @@ async function loadPreferences() {
   try {
     const values = await api.settings.get()
     if (revision !== settingsRevision) return
+    const resume = pauseWhileReading && values.pauseWhileReading === false && !refreshBrief.hidden
+    pauseWhileReading = values.pauseWhileReading !== false
+    if (resume) void refresh(false, true)
     document.querySelector('#panel-icon').hidden = values.showPanelIcon === false
     for (const group of preferenceGroups) {
       for (const field of group.elements) {
@@ -388,11 +482,75 @@ async function loadPreferences() {
       }
       group.disabled = false
     }
+    await showStrategy(values, revision)
     document.querySelector('#command-order').hidden = values.profileActions !== true
   } catch (error) {
     if (revision === settingsRevision) settingsStatus.textContent = message(error, 'Could not read settings.')
   }
 }
+const recapAgent = document.querySelector('#recap-agent'), recapStatus = document.querySelector('#recap-status')
+const previewRecap = document.querySelector('#preview-recap'), startRecap = document.querySelector('#start-recap')
+let recapRevision = 0, recapToken, previousMode
+function clearRecap() {
+  ++recapRevision
+  recapToken = undefined
+  document.querySelector('#recap-preview').hidden = true
+  document.querySelector('#recap-text').textContent = recapStatus.textContent = ''
+}
+async function showStrategy(values, revision) {
+  const mode = values.summaryStrategy ?? 'instant'
+  if (mode !== previousMode) { clearRecap(); previousMode = mode }
+  const instant = mode === 'instant'
+  document.querySelector('#strategy-hint').textContent = instant ? 'Shows existing text. No extra tokens or agent session.' :
+    `${mode === 'brief' ? 'Up to 12 recent entries and 3,000 characters; asks for a 90-word recap.' : 'Up to 48 recent entries and 12,000 characters; asks for a 400-word handoff.'} Your agent’s usual usage limits and pricing apply.`
+  document.querySelector('#recap-controls').hidden = instant
+  if (instant || !dialog.open) return
+  previewRecap.disabled = true
+  if (values.historyOutcome === false) { clearRecap(); recapStatus.textContent = 'Turn on session history above to preview a recap.'; return }
+  let agents
+  try { agents = await request('recap.agents') }
+  catch (error) {
+    if (revision === settingsRevision) { clearRecap(); recapAgent.replaceChildren(); recapStatus.textContent = message(error, 'No recap target available.') }
+    return
+  }
+  if (revision !== settingsRevision || !dialog.open) return
+  const chosen = values.recapAgent
+  recapAgent.replaceChildren(...agents.map(a => new Option(a.name, a.id)))
+  recapAgent.value = chosen ? agents.find(a => a.id === chosen)?.id ?? '' : agents.find(a => a.preferred)?.id ?? agents[0]?.id ?? ''
+  previewRecap.disabled = !recapAgent.value
+  recapStatus.textContent = !agents.length ? 'No installed agents on this host.' : !recapAgent.value ? 'Your preferred agent is not installed on this host. Choose another agent.' : ''
+}
+dialog.addEventListener('close', clearRecap)
+recapAgent.addEventListener('change', () => {
+  clearRecap()
+  void api.settings.set('recapAgent', recapAgent.value).catch(error => { recapStatus.textContent = message(error, 'Could not save agent choice.') })
+})
+previewRecap.addEventListener('click', async () => {
+  clearRecap()
+  const revision = recapRevision
+  previewRecap.disabled = true
+  try {
+    const p = await request('recap.preview', { agent: recapAgent.value })
+    if (revision !== recapRevision) return
+    recapToken = p.token
+    document.querySelector('#recap-destination').textContent = `${p.title} → ${p.agent} on ${p.environment} · ${p.prompt.length.toLocaleString()} characters including instructions`
+    document.querySelector('#recap-text').textContent = p.prompt
+    document.querySelector('#recap-preview').hidden = false
+  } catch (error) { if (revision === recapRevision) recapStatus.textContent = message(error, 'Could not preview recap.') }
+  finally { previewRecap.disabled = !recapAgent.value }
+})
+startRecap.addEventListener('click', async () => {
+  const token = recapToken
+  if (!token) return
+  clearRecap()
+  startRecap.disabled = previewRecap.disabled = true
+  try {
+    const { focused } = await request('recap.start', { token })
+    if (focused && dialog.open) dialog.close()
+    else recapStatus.textContent = 'Recap session started. Select the new agent terminal to read its reply.'
+  } catch (error) { recapStatus.textContent = message(error, 'Check Orca for a new agent session before trying again.') }
+  finally { startRecap.disabled = false; previewRecap.disabled = !recapAgent.value }
+})
 dialog.addEventListener('change', async ({ target }) => {
   if (!target.closest('.preference-group')) return
   for (const group of preferenceGroups) group.disabled = true
@@ -406,7 +564,42 @@ dialog.addEventListener('change', async ({ target }) => {
     await loadPreferences()
   }
 })
-api.settings.onDidChange(({ key }) => { if (dialog.open || key === 'showPanelIcon') void loadPreferences() })
+api.settings.onDidChange(({ key }) => { if (dialog.open || key === 'showPanelIcon' || key === 'pauseWhileReading') void loadPreferences() })
+const exclusionsPanel = document.querySelector('#exclusions')
+const exclusionStatus = document.querySelector('#exclusion-status')
+let rulesRevision = 0
+async function loadExclusions() {
+  const revision = ++rulesRevision
+  const choices = document.querySelector('#exclusion-choices'), saved = document.querySelector('#exclusion-list')
+  try {
+    const result = await request('exclusions.list')
+    if (revision !== rulesRevision) return
+    choices.replaceChildren()
+    saved.replaceChildren()
+    const row = (parent, rule, excluded, exists = false) => {
+      const item = node('div', undefined, parent, 'rule')
+      const label = node('span', undefined, item)
+      node('small', rule.kind[0].toUpperCase() + rule.kind.slice(1), label)
+      node('span', rule.label, label).title = `${rule.host}: ${rule.id}`
+      const control = button(item, exists ? 'Excluded' : excluded ? 'Exclude' : 'Remove', event => run(event.currentTarget, async () => {
+        await request('exclusions.set', { kind: rule.kind, id: rule.id, host: rule.host, excluded })
+        await loadExclusions()
+      }, excluded ? 'Exclusion saved.' : 'Exclusion removed.', 'Could not change exclusion.', exclusionStatus))
+      control.disabled = exists
+      control.setAttribute('aria-label', `${control.textContent}: ${rule.kind} ${rule.label}`)
+    }
+    for (const r of result.choices) row(choices, r, true, result.rules.some(s => s.kind === r.kind && s.host === r.host && s.id === r.id))
+    if (!result.choices.length) node('p', 'No confirmed selection to exclude.', choices, 'muted')
+    for (const r of result.rules) row(saved, r, false)
+    if (!result.rules.length) node('p', 'No exclusions.', saved, 'muted')
+  } catch (error) {
+    if (revision !== rulesRevision) return
+    choices.replaceChildren()
+    saved.replaceChildren()
+    exclusionStatus.textContent = message(error, 'Could not load exclusions.')
+  }
+}
+exclusionsPanel.addEventListener('toggle', () => { if (exclusionsPanel.open && dialog.open) void loadExclusions() })
 function openSettings(showGuide = false) {
   profileStatus.textContent = settingsStatus.textContent = document.querySelector('#copy-status').textContent = ''
   for (const group of preferenceGroups) group.disabled = true
@@ -414,6 +607,7 @@ function openSettings(showGuide = false) {
   dialog.showModal()
   if (showGuide) guide.querySelector('summary').focus()
   void loadPreferences()
+  if (exclusionsPanel.open) void loadExclusions()
   if (workflows.open) void listProfiles()
 }
 document.querySelector('#open-settings').addEventListener('click', () => openSettings())
@@ -429,20 +623,21 @@ form.elements.projectPrefix.addEventListener('input', () => { previewedPrefix = 
 for (const name of ['projectPrefix', 'reviewHost', 'openReview']) {
   form.elements[name].addEventListener('input', () => { form.elements.trustOpener.checked = false })
 }
-document.querySelector('#preview-projects').addEventListener('click', async event => {
+async function previewProjects() {
   const prefix = form.elements.projectPrefix.value
-  await run(event.currentTarget, async () => {
+  if (!prefix.trim()) return
+  try {
     const result = await request('profiles.preview', { projectPrefix: prefix })
     if (prefix !== form.elements.projectPrefix.value) return
-    preview.replaceChildren()
-    if (result.projects.length) {
-      node('p', 'Matching projects:', preview)
-      const list = node('ul', undefined, preview)
-      for (const project of result.projects) node('li', `${project.name} (${project.id})`, list)
-    } else node('p', 'No projects match.', preview)
-    if (result.truncated) node('p', 'The project list is incomplete.', preview)
+    preview.textContent = result.projects.length ? `Matches: ${result.projects.map(p => p.name).join(', ')}${result.truncated ? ' (partial list)' : ''}` : 'No matching project on this host yet.'
     previewedPrefix = prefix
-  }, 'Project preview updated.', 'Could not preview projects.', profileStatus)
+  } catch (error) { if (prefix === form.elements.projectPrefix.value) profileStatus.textContent = message(error, 'Could not check projects.') }
+}
+form.elements.projectPrefix.addEventListener('change', previewProjects)
+document.querySelector('#available-projects').addEventListener('change', ({ target }) => {
+  form.elements.projectPrefix.value = target.value
+  form.elements.projectPrefix.dispatchEvent(new Event('input'))
+  void previewProjects()
 })
 document.querySelector('#import-profile').addEventListener('change', async event => {
   const input = event.currentTarget
@@ -460,7 +655,8 @@ document.querySelector('#import-profile').addEventListener('change', async event
 form.addEventListener('submit', async event => {
   event.preventDefault()
   const prefix = form.elements.projectPrefix.value
-  if (previewedPrefix !== prefix) { profileStatus.textContent = 'Preview matching projects before saving.'; return }
+  if (previewedPrefix !== prefix) await previewProjects()
+  if (previewedPrefix !== prefix || form.elements.projectPrefix.value !== prefix) return
   const opener = argumentsOf(form.elements.openReview.value)
   const profile = {
     id: profileId, name: form.elements.name.value, enabled: imported ? false : form.elements.enabled.checked,

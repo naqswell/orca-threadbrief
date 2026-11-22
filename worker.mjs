@@ -4,6 +4,8 @@ import { fileURLToPath } from 'node:url'
 import { bindSources } from './sources.mjs'
 import { orcaJson } from './session-context.mjs'
 import { bindProfiles } from './profiles.mjs'
+import { bindRecaps } from './recaps.mjs'
+import { inbox, receive } from './profile-imports.mjs'
 
 async function reveal() {
   const root = await realpath(dirname(fileURLToPath(import.meta.url)))
@@ -26,13 +28,22 @@ export default function activate(orca) {
   orca.panels.handle('summary.focused', sources.focused)
   orca.panels.handle('summary.closed', sources.close)
   orca.panels.handle('frame', sources.frame)
-  bindProfiles(orca, { settings, focused: sources.workflowFocused })
+  orca.panels.handle('exclusions.list', sources.exclusions.list)
+  orca.panels.handle('exclusions.set', sources.exclusions.set)
+  bindRecaps(orca, { settings, source: sources.recapSource, command: orcaJson })
+  const accept = bindProfiles(orca, { settings, focused: sources.workflowFocused })
+  const key = basename(dirname(dirname(fileURLToPath(import.meta.url))))
+  let stopImports, released = false
+  if (key.endsWith('.session-summary')) void inbox(key).then(dir => receive(dir, accept, text => orca.log(text))).then(stop => {
+    if (released) stop(); else stopImports = stop
+  }).catch(error => orca.log(error.message))
   const subscription = orca.settings.onDidChange(({ key }) => {
-    if (key === 'historyOutcome' || key === 'profileActions' || key === 'commandAction') orca.panels.post('summary.changed', { reason: 'settings' })
+    if (key === 'historyOutcome' || key === 'pairedHistory') orca.panels.post('summary.changed', { reason: 'history-setting' })
+    else if (key === 'profileActions' || key === 'commandAction') orca.panels.post('summary.changed', { reason: 'settings' })
   })
   // A status contribution keeps Orca's worker alive while it observes the active summary.
   void orca.host.call('statusBar.update', { id: 'summary-observer', visible: false }).catch(error => orca.log(error.message))
-  release = () => { subscription?.dispose?.(); sources.stop() }
+  release = () => { released = true; stopImports?.(); subscription?.dispose?.(); sources.stop() }
 }
 
 export function deactivate() { release?.(); release = undefined }

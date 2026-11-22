@@ -8,9 +8,21 @@ If you want to know where you left off, you only need the plugin and a local age
 2. For a quick trial, ask: **“I have six guests and eight chairs. How many chairs will be spare? Answer in one sentence.”** Wait for the answer. Leave the conversation tab selected; you don't have to close it.
 3. Open **Threadbrief** in the right sidebar. Under **From session history**, you should see the agent's answer about the two spare chairs. Switch to a different conversation and the panel follows that selection.
 
-The panel displays a reply the agent already wrote, in its original language. It doesn't call a second model to summarize the conversation. It looks through the last 20 history entries for the latest assistant message with text, skips tool calls and short acknowledgements, and shows up to 1,600 characters before an ellipsis.
+In the default **Instant** mode the panel displays a reply the agent already wrote, in its original language. Opening it never starts a second model. It looks through the last 20 history entries for the latest assistant message with text, skips tool calls and short acknowledgements, and shows up to 1,600 characters before an ellipsis.
 
 No formatting prompt is required. Plain text keeps its line breaks. Markdown replies display headings, lists, tables, emphasis and code; command examples are selectable text, not actions. Web links open through Orca when you click them. File links keep their label and show the path on hover. HTML is displayed as text and remote images are not loaded.
+
+## Choose a strategy and an agent
+
+| Settings → Recap strategy | What it does | Extra model usage |
+| --- | --- | --- |
+| **Instant** (default) | Reads existing text. Use it to pick up where you left off. | None |
+| **Brief recap** | Sends up to 3,000 characters from the last 12 entries. Asks for goal, outcome and next step in up to 90 words. | One new agent session per confirmed request |
+| **Detailed handoff** | Sends up to 12,000 characters from the last 48 entries. Asks for decisions, evidence, loose ends and next steps in up to 400 words. | One new session with a larger input and requested output |
+
+Select a **finished conversation**, open the gear and choose a strategy. Pick an Orca agent installed on the source host, then **Preview recap request**. Read the destination and the exact prompt, including the excerpt. Tool calls and tool output are left out; ordinary messages may still contain private information. **Start recap in new session** opens a separate agent terminal in that workspace. Select the new terminal to read the answer there or in Threadbrief. The source conversation and its saved report are not changed.
+
+The new session uses that agent’s configured account, default model and permissions, not necessarily the model override from your original tab. No provider key or second login goes into Threadbrief. Configure the agent’s default in Orca or its own settings. The prompt asks for a text-only answer; the plugin does not sandbox the agent. Character and word budgets are not token or price guarantees: provider, model, reasoning and account plan determine cost. Previewing, switching modes and refreshing the panel never launch a model. If history is disabled or the selection is excluded, no recap can start.
 
 ## Choose what goes into the recap
 
@@ -35,14 +47,20 @@ The panel shows the first available source, not a blend of conversations:
 | Label in the panel | Whose work it describes |
 | --- | --- |
 | **Saved for this session** | A report explicitly written for this Orca session. It wins even if there is a newer reply. |
-| **From session history** | The selected local agent's last substantive reply after the session finishes. On by default. |
+| **From session history** | The selected agent's last substantive reply after the session finishes. On by default for both local and paired sessions. |
 | **Shared with this worktree** | A saved report for the checkout. It can include other sessions' work; it isn't attributed to the selected agent. |
 
-Turning off **Use the agent’s last reply** disables the middle source only. It doesn't delete anything. The plugin doesn't send your history to a summarization service.
+Turning off **Use the agent’s last reply** disables history, including manual recap previews. It doesn't delete anything. No history is sent to an agent unless you confirm the preview.
+
+## Using a paired Orca server
+
+Install Threadbrief on the desktop that shows the panel. Pair the server in Orca, select its agent tab and leave **Read paired session history** on. Threadbrief checks the server, workspace, pane and session ID before requesting history over the Orca connection. It never substitutes a local transcript or launches a local agent if the server disconnects. Brief and Detailed list the agents installed on that server and launch the confirmed prompt in a new terminal there, with that server's agent account. Select the new terminal from the paired workspace to see the result.
+
+Turn off **Read paired session history** for saved reports only. To supply a remote report, run the writer in the next section **on the desktop**, with `--environment <paired-name>` and the remote session ID. The writer verifies the session with the server, then saves the report locally. The server does not need its own plugin. Installing a second copy does not synchronize files, settings or exclusions. Project-specific workflow commands still require a local Git worktree.
 
 ## Save a report that won't change with the next reply
 
-Skip this if history is enough. Use a saved report for a stable handoff, or when the session runs in a paired environment where the plugin doesn't read history.
+Skip this if history is enough. Use a saved report for a stable handoff or when a host does not expose readable session history.
 
 1. On the machine running the plugin, open a terminal in a checkout of this plugin's source. The writer needs Node.js 24 and the Orca CLI. Keep the target session open. Run `orca agent list --environment local --json` and find its `orcaSessionId`; don't use the tab title. For a paired environment, substitute its name or ID for `local`.
 2. Create a UTF-8 file named `summary.json`. All three fields below are required. Use one line of plain text per field, up to 480 characters each. For `next`, say what remains or explicitly say that nothing remains. Don't include credentials or private links you wouldn't want someone reading the panel to see.
@@ -74,11 +92,24 @@ Skip this if history is enough. Use a saved report for a stable handoff, or when
 
 | What you see | What to try |
 | --- | --- |
-| The panel asks you to select a local agent tab | Select the conversation itself, not a file, empty shell, or browser tab. In a split terminal, select the pane with the agent. |
-| The agent is still working | Wait for its turn to finish. A progress message isn't a final reply. |
+| The panel asks you to select an agent tab | Select the conversation itself, not a file, empty shell, or browser tab. In a split terminal, select the pane with the agent. |
+| A moving field of threads fills the panel | The selected summary is loading. Quick switches skip it; with reduced motion enabled, the threads stay still. |
+| **Agent working** | You can keep reading this session’s last completed reply or saved report. The unfinished turn is not a summary. If there is no previous result, the panel waits for the first one. |
+| **Update available · Refresh** | You were reading when the same session changed. Your selection and scroll position stay put until you choose **Refresh**. Switching sessions follows the new selection; turning off history or excluding it clears the old view immediately. |
+| You prefer a live view even while reading | Turn off **Pause updates while reading** in the gear under **Panel**, or in Orca’s plugin settings. Any pending result appears immediately; future updates no longer wait for **Refresh**. This does not start a model. |
 | The agent finished, but there is no history reply | Check **Use the agent’s last reply**. Ask for a short recap in the same tab. If Orca has no readable history for this session, use a saved report. |
-| A paired session has no reply | This is expected. Use a saved session report or a shared worktree report. |
+| A paired session has no reply | Check the paired connection, both history preferences and whether the agent finished. If the server does not expose that transcript, use a saved report. |
 | The panel shows a shared report or an older saved report | Check the source label above. A shared report belongs to the checkout. To change a saved session report, write it again for the same session ID. |
+
+## Turn off summaries for selected work
+
+Open the gear and expand **Excluded summaries**. Choose **Exclude** beside the current session, workspace or project. A workspace rule covers its sessions; a project rule also covers future workspaces in that project. If more than one rule matches, any one of them keeps summaries off. Under **Saved exclusions**, choose **Remove** to undo a rule, even if the original session is closed.
+
+Threadbrief keeps these rules locally by ID, not by name. It still needs Orca's selection metadata to check a rule, but it skips history, saved reports, workflow actions and automatic panel opening for an excluded selection. It does not stop agents, disable Orca's own history or delete saved reports. If it cannot verify a relevant exclusion, it withholds the summary.
+
+## What about Orca Bots?
+
+Threadbrief follows the selected Orca agent session, not a bot account, connector or inbox. If a bot run is available as a regular selected agent session with a confirmed ID, the same source order and exclusions apply. A bot conversation with no such session is not a source of session history. The plugin does not search background bot runs, read Slack threads or post replies on the bot's behalf.
 
 ## Do I need a workflow profile?
 

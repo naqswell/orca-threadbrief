@@ -1,43 +1,76 @@
 import { stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { directory, legacyDirectory, filename, sessionFilename, readSnapshot } from './store.mjs'
-import { focusedSession, orcaJson, readFocus, safeEnvironment } from './session-context.mjs'
+import { focusedSession, orcaJson, readFocus, safeEnvironment, sessionId } from './session-context.mjs'
+import { createExclusions } from './exclusions.mjs'
 
 const identity = id => typeof id === 'string' && id.startsWith('identity:wt2:')
 const focusKey = value => value && JSON.stringify([value.workspace, value.host, value.tab, value.leaf, value.kind, value.entity, value.sessionId])
 const acknowledgement = /^(?:(?:ok(?:ay)?|done|thanks|thank you|got it|yes|no|да|нет|ок|окей|понял[аи]?|готово|сделано|спасибо)[\s\p{P}]*)+$/iu
 export function lastOutcome(history, id) {
   if (history?.orcaSessionId !== id || history.state === 'working' || !Array.isArray(history.entries)) return null
-  for (let i = history.entries.length - 1; i >= 0; i--) {
-    const entry = history.entries[i]
+  return outcomeBefore(history.entries, history.entries.length)
+}
+function outcomeBefore(entries, end) {
+  for (let i = end - 1; i >= 0; i--) {
+    const entry = entries[i]
     if (entry.role !== 'assistant' || entry.kind !== 'message' || entry.tools?.length) continue
     const reply = typeof entry.text === 'string' ? entry.text.trim() : ''
     if (reply && (reply.length > 96 || !acknowledgement.test(reply))) return reply.length > 1600 ? reply.slice(0, 1600).trimEnd() + '…' : reply
   }
   return null
 }
+function previousOutcome(history, id) {
+  if (history?.orcaSessionId !== id || !Array.isArray(history.entries)) return null
+  const turn = history.entries.findLastIndex(e => e.role === 'user' && e.kind === 'message')
+  return outcomeBefore(history.entries, turn)
+}
 async function pairedAddress(id, command, environment) {
   if (typeof id !== 'string' || !/^[^:/]+::[^\0]+$/u.test(id)) return null
-  const environments = environment ? [{ id: environment }] : (await command(['environment', 'list']))?.environments
-  if (!Array.isArray(environments)) return null
-  const targets = await Promise.all(environments.map(async item => {
-    if (!safeEnvironment(item.id)) return null
-    const found = await command(['worktree', 'show', '--environment', item.id, '--worktree', `id:${id}`]).catch(() => null)
-    const worktree = found?.worktree
-    return worktree?.id === id && worktree.address?.environment === item.id && identity(worktree.address.worktree) ? worktree.address : null
-  }))
-  const matches = targets.filter(Boolean)
-  return matches.length === 1 ? matches[0] : null
+  if (!safeEnvironment(environment)) return null
+  const found = await command(['worktree', 'show', '--environment', environment, '--worktree', `id:${id}`]).catch(() => null)
+  const worktree = found?.worktree
+  return worktree?.id === id && worktree.address?.environment === environment && identity(worktree.address.worktree) ? worktree.address : null
 }
 export function bindSources(orca, { settings, reveal, roots = [directory, legacyDirectory], command = orcaJson, focus = readFocus, interval = 1000 }) {
   const listeners = new Set(), created = new Map()
+  const completed = new Map()
   let selection, timer, stopped = false, checking = false, generation = 0
   const context = () => orca.host.call('workspace.readContext')
   const getFocus = () => focus().catch(() => null)
   const post = reason => { if (listeners.size && !stopped) orca.panels.post('summary.changed', { reason }) }
   const invalidate = reason => { generation++; selection = null; post(reason) }
+  let observedWorkspace
+  const resolve = (active, selected) => focusedSession(active?.workspaceId, selected, command).catch(() => null)
+  async function metadata() {
+    const [active, selected] = await Promise.all([context(), getFocus()])
+    const session = await resolve(active, selected)
+    return { active, selected, session }
+  }
+  const exclusions = createExclusions(orca, metadata, () => { completed.clear(); invalidate('exclusions') })
+  const selector = id => /^(?:folder:|identity:wt2:)/u.test(id) ? id : `id:${id}`
+  async function remoteState(session, workspaceId) {
+    const list = await command(['agent', 'list', '--environment', session.environment, '--worktree', selector(workspaceId)]).catch(() => null)
+    const matches = !list?.truncated && list?.agents?.filter(a => a.paneKey === session.paneKey && sessionId(a.orcaSessionId) === session.id)
+    return matches?.length === 1 ? matches[0] : null
+  }
+  async function recapSource() {
+    const start = generation
+    const [active, selected] = await Promise.all([context(), getFocus()])
+    const { session, excluded } = await exclusions.check({ active, selected }, () => resolve(active, selected))
+    const prefs = await settings()
+    if (excluded || prefs.historyOutcome === false || (session?.environment !== 'local' && prefs.pairedHistory === false)) throw Error('History is off for this selection.')
+    const live = session?.environment && session.environment !== 'local' ? await remoteState(session, active.workspaceId) : session
+    if (!session || !live || live.state !== 'done' || (session.environment === 'local' && selected.host && selected.host !== 'local')) throw Error('Select a finished agent on a connected Orca host.')
+    checkGeneration(start)
+    return { id: session.id, environment: session.environment, worktree: selector(active.workspaceId), workspaceId: active.workspaceId, title: session.title, key: JSON.stringify([active.workspaceId, focusKey(selected), session.id, live.updatedAt]) }
+  }
+  function checkGeneration(start) {
+    if (start !== generation) throw Error('The active selection changed.')
+  }
   async function find(parts, name, current) {
     for (const root of roots) {
+      checkGeneration(current.start)
       current.files.add(join(root, ...parts, name))
       const value = await readSnapshot(root, parts, name).catch(() => null)
       if (value) return { value, root, parts, name }
@@ -60,6 +93,11 @@ export function bindSources(orca, { settings, reveal, roots = [directory, legacy
       if (selection !== current) return
       if (focusKey(selected) !== current.key) invalidate('selection')
       else if (files !== current.fingerprint) invalidate('file')
+      else if (current.monitor && Date.now() >= current.nextCheck) {
+        current.nextCheck = Date.now() + 4000
+        const live = await remoteState(current.agent, current.workspaceId)
+        if (selection === current && (current.liveState !== live?.state || current.updatedAt !== live?.updatedAt)) invalidate('session')
+      }
     } finally { checking = false }
   }
   function listen(panel) {
@@ -71,30 +109,55 @@ export function bindSources(orca, { settings, reveal, roots = [directory, legacy
     const start = generation
     const active = await context()
     const workspaceId = active?.workspaceId
+    observedWorkspace = workspaceId
     if (!workspaceId) return { scope: 'none', summary: null }
     const selected = await getFocus(), key = focusKey(selected)
-    const current = { key, files: new Set(), workspaceId, selected, source: null, agent: null }
-    const session = await focusedSession(workspaceId, selected, command).catch(() => null)
+    const current = { start, key, files: new Set(), workspaceId, selected, source: null, agent: null }
+    const { session, excluded } = await exclusions.check({ active, selected }, () => resolve(active, selected))
     current.agent = session
+    const contextKey = JSON.stringify([workspaceId, session?.environment ?? selected?.host, session?.id ?? key])
+    let working = false
     let view = session ? { scope: 'session', title: session.title, summary: null } : { scope: 'none', summary: null }
-    if (session) {
+    checkGeneration(start)
+    if (excluded) view = { scope: 'excluded', excluded, summary: null }
+    else if (session) {
+      working = session.state === 'working'
       const saved = await find(['sessions', session.environment], sessionFilename(session.id), current)
-      if (saved) { current.source = saved; view.summary = saved.value }
-      else if (session.environment !== 'local') view.emptyReason = 'paired'
-      else if ((await settings()).historyOutcome === false) view.emptyReason = 'historyOff'
-      else if (session.state === 'working') view.emptyReason = 'waiting'
-      else if (session.state === 'done') {
-        const history = await command(['agent', 'read', `orca_session_id:${session.id}`, '--environment', 'local', '--limit', '20']).catch(() => null)
-        const outcome = lastOutcome(history, session.id)
-        if (outcome) view.outcome = outcome
-        else view.emptyReason = 'noReply'
-      } else view.emptyReason = 'noReply'
+      if (saved) {
+        current.source = saved; view.summary = saved.value
+        if (session.environment !== 'local') {
+          const live = await remoteState(session, workspaceId)
+          working = live?.state === 'working'
+          Object.assign(current, { monitor: true, nextCheck: Date.now() + 4000, liveState: live?.state, updatedAt: live?.updatedAt })
+        }
+      } else {
+        const prefs = await settings()
+        const paired = session.environment !== 'local'
+        if (prefs.historyOutcome === false) view.emptyReason = 'historyOff'
+        else if (paired && prefs.pairedHistory === false) view.emptyReason = 'pairedOff'
+        else {
+          const live = paired ? await remoteState(session, workspaceId) : session
+          working = live?.state === 'working'
+          if (paired) Object.assign(current, { monitor: true, nextCheck: Date.now() + 4000, liveState: live?.state, updatedAt: live?.updatedAt })
+          if (!live) view.emptyReason = 'unavailable'
+          else if (working && completed.has(contextKey)) view.outcome = completed.get(contextKey)
+          else if (working || live.state === 'done') {
+            checkGeneration(start)
+            const history = await command(['agent', 'read', `orca_session_id:${session.id}`, '--environment', session.environment, '--limit', '20']).catch(() => null)
+            const outcome = working ? previousOutcome(history, session.id) : lastOutcome(history, session.id)
+            if (outcome) view.outcome = outcome
+            else view.emptyReason = working ? 'waiting' : paired && !history ? 'unavailable' : 'noReply'
+          } else view.emptyReason = 'noReply'
+        }
+      }
     }
-    if (!view.summary && !view.outcome && !workspaceId.startsWith('folder:')) {
+    if (!excluded && !view.summary && !view.outcome && !workspaceId.startsWith('folder:')) {
       let address = null
-      if (identity(workspaceId)) address = { environment: 'local', worktree: workspaceId }
-      else if (!selected || (selected.workspace === workspaceId && selected.host?.startsWith('runtime:'))) {
-        address = await pairedAddress(workspaceId, command, selected?.host?.startsWith('runtime:') ? selected.host.slice(8) : undefined).catch(() => null)
+      const paired = selected?.host?.startsWith('runtime:')
+      if (identity(workspaceId) && selected && (!selected.host || selected.host === 'local')) address = { environment: 'local', worktree: workspaceId }
+      else if (paired && selected.workspace === workspaceId && safeEnvironment(selected.host.slice(8))) {
+        const environment = selected.host.slice(8)
+        address = identity(workspaceId) ? { environment, worktree: workspaceId } : await pairedAddress(workspaceId, command, environment).catch(() => null)
       }
       if (address) {
         const parts = address.environment === 'local' ? [] : ['paired', address.environment]
@@ -104,6 +167,7 @@ export function bindSources(orca, { settings, reveal, roots = [directory, legacy
     }
     if (includePublication && current.source && view.scope === 'worktree') {
       const { root, parts, name } = current.source
+      checkGeneration(start)
       const privateData = await readSnapshot(root, parts, name, undefined, true).catch(() => null)
       if (privateData && JSON.stringify(privateData.meta) === JSON.stringify(view.summary) && privateData.legacyPublication) view.legacyPublication = privateData.legacyPublication
     }
@@ -114,6 +178,12 @@ export function bindSources(orca, { settings, reveal, roots = [directory, legacy
       invalidate('selection')
       throw Error('The active selection changed.')
     }
+    if (!excluded && session && !working && view.outcome) {
+      completed.delete(contextKey)
+      completed.set(contextKey, view.outcome)
+      if (completed.size > 12) completed.delete(completed.keys().next().value)
+    }
+    if (!includePublication) { view.contextKey = contextKey; view.working = working }
     if (view.scope !== 'none') view.workspaceId = workspaceId
     selection = current
     return view
@@ -144,7 +214,11 @@ export function bindSources(orca, { settings, reveal, roots = [directory, legacy
       if (id !== raw && id !== item.workspaceListId) continue
       created.delete(raw)
       if ((await settings()).autoOpen !== true) return
-      try { const view = await focused(); if (view.summary && (await context())?.workspaceId === id) await reveal() } catch { /* selection changed */ }
+      try {
+        const start = generation
+        const view = await focused()
+        if (view.summary && (await context())?.workspaceId === id && generation === start) await reveal()
+      } catch { /* selection changed or exclusions could not be verified */ }
       return
     }
   }
@@ -153,12 +227,16 @@ export function bindSources(orca, { settings, reveal, roots = [directory, legacy
     created.set(workspaceId, { workspaceListId, expires: Date.now() + 15000 })
     await maybeReveal((await context())?.workspaceId)
   })
-  orca.events.on('workspace.changed', ({ context: next } = {}) => { invalidate('workspace'); void maybeReveal(next?.workspaceId) })
+  orca.events.on('workspace.changed', ({ context: next } = {}) => {
+    if (observedWorkspace && observedWorkspace === next?.workspaceId) void tick()
+    else { observedWorkspace = next?.workspaceId; invalidate('workspace') }
+    void maybeReveal(next?.workspaceId)
+  })
   orca.events.on('agent.status.changed', event => {
     const current = selection
     if (!current || (event.workspaceId && event.workspaceId !== current.workspaceId && event.workspaceId !== current.selected?.workspace && event.workspaceListId !== current.workspaceId)) return
     const pane = current.agent?.paneKey ?? (current.selected?.tab && current.selected?.leaf ? `${current.selected.tab.replace(/^web-terminal-/u, '')}:${current.selected.leaf}` : null)
     if (pane && pane === event.paneKey) invalidate('session')
   })
-  return { focused, workflowFocused, close, frame, stop }
+  return { focused, workflowFocused, recapSource, close, frame, stop, exclusions }
 }

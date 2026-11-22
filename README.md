@@ -1,10 +1,12 @@
 # Threadbrief for Orca
 
-Pick up where you left off. Select an agent tab in Orca and open **Threadbrief** in the right sidebar. By default, the panel shows the last substantive reply from that local session once the agent finishes. No workflow profile, API key or report file is required.
+Pick up where you left off. Select an agent tab in Orca and open **Threadbrief** in the right sidebar. By default, the panel shows the last substantive reply from that session once the agent finishes. No workflow profile, API key or report file is required.
 
 **[Start here: get your first summary](docs/getting-started.md)**. Try a short task, see exactly what appears, and learn how to ask for a three-line handoff in your own language.
 
 ![Threadbrief cover: a thread leads to three notes labeled Goal, Done and Next.](assets/threadbrief-cover.png)
+
+**Paired Orca servers:** install Threadbrief on the desktop that shows the panel. It reads the selected session from its own paired server and starts a recap there only after a preview. No plugin installation on the server is required. Report files, exclusions and workflow profiles do not sync between machines. [Paired setup and limitations](docs/getting-started.md#using-a-paired-orca-server).
 
 ## Install
 
@@ -26,11 +28,15 @@ A folder installation uses `local.session-summary` instead. **If you already use
 
 ## Settings
 
-Click the gear beside the task title. Leave **Use the agent’s last reply** on for automatic local history. Turn it off if you only want saved reports. Expand **How to get your first summary** for a prompt you can copy and adapt. The plugin never sends it for you.
+Click the gear beside the task title. **Instant** shows existing text without a model call. For a new summary, choose **Brief recap** or **Detailed handoff**, select an installed Orca agent, and preview the exact excerpt before starting its separate session. The agent uses its existing account and model configuration. [Compare strategies and costs](docs/getting-started.md#choose-a-strategy-and-an-agent).
 
-Under **Panel**, hide the colored plugin icon or have the panel open when a new worktree already has a saved summary. Automatic opening is off by default. You can also change preferences in Orca under **Settings → Plugins → Threadbrief**.
+**Excluded summaries** skips history and saved reports for a session, workspace or project. Remove any rule there to resume. For saved reports only, turn off **Use the agent’s last reply**.
+
+Use **Orca Settings → Plugins → Threadbrief** or the panel gear for the same preferences: local/paired history, recap strategy, preferred agent, icon, auto-open, workflow commands and their order. In native Settings the preferred agent is its installed ID (empty uses the host default); the panel offers a live picker. Context-specific operations—excluding the selected item, editing profiles and previewing an actual recap—belong to the panel, not the native preference form.
 
 ## Private workflows
+
+**Configuring this for someone else?** [Create, check and apply a profile from the CLI](docs/workflow-profiles.md). The installed worker accepts the same JSON as the panel; no developer mode or GUI automation needed.
 
 Expand **Settings → Workflow profiles** only if you want project-specific commands. Create a profile or choose **Import JSON** with a local file. The [example profile](examples/team-profile.json) uses neutral project data. A profile matches the beginning of an Orca project ID, not the visible workspace title. Preview the matches before saving. Imports start disabled; enable the profile and turn on **Show profile commands** when ready. If two enabled profiles match, the panel does not choose one.
 
@@ -49,8 +55,9 @@ This is a **trusted worker**, not a sandboxed theme. It reads local saved report
 | Orca permission | Why it is requested |
 | --- | --- |
 | `workspace:read`, `agent:read` | Identify the worktree and agent session, and react when selection or agent state changes. |
-| `settings:own`, `storage:own` | Read plugin preferences and keep workflow profiles and opener approvals in the plugin’s own store. |
-| `workspace:write` | Focus the empty terminal explicitly opened by the user for a workflow action. |
+| `agent:launch` | Start a separate recap agent after you approve its prompt. Opening the panel never launches one. |
+| `settings:own`, `storage:own` | Keep preferences, exclusions, workflow profiles and opener approvals on this installation. |
+| `workspace:write` | Focus the new recap agent or the empty terminal opened for a workflow action. |
 | `terminal:send` | Orca requires this capability to create an empty terminal. The plugin does not send text or Enter. |
 
 ## Development and release checks

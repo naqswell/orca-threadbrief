@@ -19,16 +19,18 @@ async function fixture(t) {
   for (const root of roots) await mkdir(join(root, 'sessions', 'local'), { recursive: true, mode: 0o700 })
   let selected = { workspace: workspaceId, host: 'local', tab: 'terminal-one', leaf: 'leaf', kind: 'terminal' }
   let active = { workspaceId, displayName: 'Books' }, history = true, state = 'done'
+  let entries = [{ role: 'assistant', kind: 'message', text: 'A substantive outcome.' }]
   const events = {}, posted = []
   const orca = { host: { call: async () => active }, panels: { post: (...args) => posted.push(args) }, events: { on: (name, fn) => { events[name] = fn } } }
+  orca.storage = { get: async () => null }
   const command = async args => {
     if (args[0] === 'agent' && args[1] === 'list') return { agents: [{ kind: 'terminal', paneKey: `${selected.tab}:${selected.leaf}`, orcaSessionId: selected.tab === 'terminal-one' ? 'first' : 'second', title: selected.tab, state }] }
-    if (args[0] === 'agent' && args[1] === 'read') return { orcaSessionId: args[2].replace('orca_session_id:', ''), entries: [{ role: 'assistant', kind: 'message', text: 'A substantive outcome.' }] }
+    if (args[0] === 'agent' && args[1] === 'read') return { orcaSessionId: args[2].replace('orca_session_id:', ''), entries, state }
     return null
   }
   const sources = bindSources(orca, { roots, command, focus: async () => selected, settings: async () => ({ historyOutcome: history, autoOpen: false }), reveal: async () => {}, interval: 10 })
   t.after(() => sources.stop())
-  return { roots, sources, events, posted, setFocus: value => { selected = value }, setActive: value => { active = value }, setHistory: value => { history = value }, setState: value => { state = value } }
+  return { roots, sources, events, posted, setFocus: value => { selected = value }, setActive: value => { active = value }, setHistory: value => { history = value }, setState: value => { state = value }, setEntries: value => { entries = value } }
 }
 async function save(root, parts, name, value) {
   const path = join(root, ...parts)
@@ -79,6 +81,22 @@ test('a working or mismatched history is never shown', async t => {
   const view = await f.sources.focused()
   assert.equal(view.outcome, undefined)
   assert.equal(view.scope, 'session')
+})
+
+test('a working session keeps its previous completed outcome, never progress or a neighbouring session’s text', async t => {
+  const f = await fixture(t)
+  const first = await f.sources.focused()
+  f.setState('working')
+  f.setEntries([{ role: 'assistant', kind: 'message', text: 'Unfinished progress' }])
+  let view = await f.sources.focused()
+  assert.equal(view.working, true)
+  assert.equal(view.outcome, first.outcome)
+  f.setFocus({ workspace: workspaceId, host:'local', tab:'terminal-two', leaf:'leaf', kind:'terminal' })
+  assert.equal((await f.sources.focused()).outcome, undefined)
+  f.setEntries([['user','Earlier task'], ['assistant','Earlier handoff'], ['user','New task'], ['assistant','Unfinished progress']].map(([role,text]) => ({ role, kind:'message', text })))
+  view = await f.sources.focused()
+  assert.equal(view.outcome, 'Earlier handoff')
+  assert.notEqual(view.contextKey, first.contextKey)
 })
 
 test('agent events invalidate the selected session', async t => {
@@ -159,6 +177,7 @@ test('a paired worktree uses the confirmed remote identity', async t => {
   await save(root, ['paired', 'peer'], filename(workspaceId), record('Paired'))
   const selected = { workspace: remoteId, host: 'runtime:peer', tab: 'file', kind: 'file' }
   const orca = { host: { call: async () => ({ workspaceId: remoteId }) }, panels: { post() {} }, events: { on() {} } }
+  orca.storage = { get: async () => null }
   const command = async args => args[0] === 'worktree' ? { worktree: { id: remoteId, address: { environment: 'peer', worktree: workspaceId } } } : null
   const sources = bindSources(orca, { roots: [root], command, focus: async () => selected, settings: async () => ({ historyOutcome: true }), reveal() {} })
   t.after(() => sources.stop())

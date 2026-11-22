@@ -27,13 +27,26 @@ function setup() {
       if (method === 'project.list') return {projects:[project], truncated:false}
       if (method === 'terminal.create') return {terminalId:'new-terminal'}
       if (method === 'terminal.focus') return {focused:true}
+      if (method === 'settings.set') { settings[args.key] = args.value; return {ok:true} }
       throw Error(`Unexpected host call ${method}`)
     }}
   }
-  bindProfiles(orca, {settings:async () => settings, focused:async () => selection})
-  return {workspace, project, calls, data, request:(name, args = {}) => handlers.get(name)(args),
+  const accept = bindProfiles(orca, {settings:async () => settings, focused:async () => selection})
+  return {workspace, project, calls, data, accept, request:(name, args = {}) => handlers.get(name)(args),
     select:value => {selection = value}, configure:value => {settings = value}}
 }
+
+test('external import replaces by ID, only enables on request and never inherits opener trust', async () => {
+  const s = setup(), p = {...profile, openReview:['/bin/echo', '{url}']}
+  await s.request('profiles.save', {profile:p, trustOpener:true})
+  await s.accept(p, false)
+  assert.deepEqual((await s.request('profiles.list')).profiles, [{...p, enabled:false}])
+  assert.deepEqual(Object.keys(s.data.get('trustedWorkflowOpeners')), [])
+  s.configure({profileActions:false})
+  await s.accept({...p, name:'Renamed'}, true)
+  assert.equal((await s.request('workflow.view')).state, 'actions')
+  assert.deepEqual((await s.request('profiles.list')).profiles.map(item => item.name), ['Renamed'])
+})
 
 const snapshot = () => ({cwd:tmpdir(), branch:'feature', repo:'books', mr:{base:'main', title:'Original', description:'First\nSecond'}})
 
