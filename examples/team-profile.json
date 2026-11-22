@@ -1,0 +1,13 @@
+{
+  "id": "team-example",
+  "name": "Team workflow",
+  "enabled": false,
+  "projectPrefix": "git:example/",
+  "reviewHost": "git.example.org",
+  "shell": "posix",
+  "steps": [
+    { "label": "Push to origin", "kind": "push", "argv": ["git", "push", "origin", "{branch}"] },
+    { "label": "Push to backup", "kind": "push", "argv": ["git", "push", "backup", "{branch}"] },
+    { "label": "Prepare review", "kind": "review", "argv": ["review-tool", "create", "--repo", "{repo}", "--source", "{branch}", "--base", "{base}", "--title", "{title}", "--description", "{description}"] }
+  ]
+}

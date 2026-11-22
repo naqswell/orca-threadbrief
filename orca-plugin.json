@@ -1,0 +1,30 @@
+{
+  "manifestVersion": 2,
+  "id": "session-summary",
+  "name": "Session Summary",
+  "version": "0.1.0",
+  "icon": "assets/session-summary.png",
+  "description": "See the outcome of the active agent session or the shared summary of its worktree.",
+  "repository": "https://github.com/naqswell/orca-session-summary",
+  "license": "MIT",
+  "engines": { "orca": ">=1.4.268" },
+  "execution": "trusted-worker",
+  "main": "worker.mjs",
+  "capabilities": [
+    { "kind": "workspace:read" }, { "kind": "agent:read" },
+    { "kind": "settings:own" }, { "kind": "storage:own" },
+    { "kind": "workspace:write" }, { "kind": "terminal:send" }
+  ],
+  "contributes": {
+    "panels": [{ "id": "summary", "title": "Session Summary", "icon": "layers", "entry": "panel.html", "ui": "html" }],
+    "events": [{ "on": "workspace.created" }, { "on": "workspace.changed" }, { "on": "agent.status.changed" }],
+    "statusBarItems": [{ "id": "summary-observer" }],
+    "settings": [
+      { "key": "showPanelIcon", "title": "Show icon in panel header", "description": "Show the Session Summary mark next to the panel title. The sidebar tab is unchanged.", "type": "boolean", "default": true },
+      { "key": "historyOutcome", "title": "Show outcome from local history", "description": "If no saved session summary exists, show the last substantive reply from that completed session.", "type": "boolean", "default": true },
+      { "key": "autoOpen", "title": "Auto-open for new worktrees", "description": "Show the panel when a newly created worktree has a saved summary.", "type": "boolean", "default": false },
+      { "key": "profileActions", "title": "Enable workflow profile actions", "description": "Show actions only for a project matching one of your enabled profiles.", "type": "boolean", "default": false },
+      { "key": "commandAction", "title": "Preferred command action", "type": "string", "default": "copy", "enum": ["copy", "terminal"], "enumLabels": ["Copy command", "Open terminal"] }
+    ]
+  }
+}
