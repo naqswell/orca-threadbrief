@@ -5,6 +5,7 @@ import { bindSources } from './sources.mjs'
 import { orcaJson } from './session-context.mjs'
 import { bindProfiles } from './profiles.mjs'
 import { bindRecaps } from './recaps.mjs'
+import { bindCheckpoints } from './session-checkpoint.mjs'
 import { inbox, receive } from './profile-imports.mjs'
 import { createConfig } from './settings-config.mjs'
 
@@ -32,6 +33,7 @@ export default function activate(orca) {
   orca.panels.handle('exclusions.list', sources.exclusions.list)
   orca.panels.handle('exclusions.set', sources.exclusions.set)
   const revokeRecap = bindRecaps(orca, { settings, target: sources.recapTarget, source: sources.recapSource, command: orcaJson })
+  bindCheckpoints(orca, { source: sources.recapSource, command: orcaJson })
   const profiles = bindProfiles(orca, { settings, focused: sources.workflowFocused })
   const configure = createConfig(orca, sources.exclusions, profiles)
   const pluginDir = dirname(dirname(fileURLToPath(import.meta.url)))
@@ -41,7 +43,7 @@ export default function activate(orca) {
     if (released) stop(); else stopImports = stop
   }).catch(error => orca.log(error.message))
   const subscription = orca.settings.onDidChange(({ key }) => {
-    if (['historyOutcome', 'pairedHistory', 'summaryStrategy', 'recapAgent', 'recapModel'].includes(key)) revokeRecap()
+    if (['historyOutcome', 'pairedHistory', 'summaryStrategy', 'recapAgent', 'recapModel', 'recapEffort'].includes(key)) revokeRecap()
     if (key === 'historyOutcome' || key === 'pairedHistory' || key === 'manualLoad') sources.historyChanged()
     else if (key === 'profileActions' || key === 'commandAction') orca.panels.post('summary.changed', { reason: 'settings' })
   })

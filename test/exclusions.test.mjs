@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { bindSources } from '../sources.mjs'
+import { bindProfiles } from '../profiles.mjs'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -22,7 +23,7 @@ async function fixture(t) {
     t.after(api.stop)
     return api
   }
-  const save = () => writeFile(join(root, filename(state.id)), JSON.stringify({ goal: 'Shared', done: 'Checked', next: 'None', links: {} }), { mode: 0o600 })
+  const save = (goal = 'Shared') => writeFile(join(root, filename(state.id)), JSON.stringify({ goal, done: 'Checked', next: 'None', links: {} }), { mode: 0o600 })
   return { state, api: restart(), restart, save, created: () => events['workspace.created']({ kind: 'worktree', workspaceId: state.id }) }
 }
 
@@ -98,6 +99,65 @@ test('on-demand A → B → A restores the last explicit read, not the latest hi
   await load()
   api.historyChanged()
   assert.equal((await api.focused()).scope, 'manual')
+})
+
+test('a host without a local agent namespace cannot restore or refresh a local brief', async t => {
+  const { state, api } = await fixture(t)
+  state.manual = true
+  state.reply = 'Desktop session'
+  assert.equal((await api.focused({ loadFor: (await api.focused()).contextKey })).outcome, state.reply)
+  const reads = state.history
+  for (state.host of ['ssh:other', 'runtime:local']) {
+    const selected = await api.focused()
+    assert.equal(selected.outcome, undefined)
+    assert.equal((await api.focused({ loadFor: selected.contextKey })).outcome, undefined)
+  }
+  assert.equal(state.history, reads)
+})
+
+test('a manually loaded shared report survives a workspace switch without an agent session', async t => {
+  const { state, api, save } = await fixture(t)
+  state.manual = true
+  state.session = null
+  await save()
+  const workspace = state.id
+  const brief = await api.focused({ loadFor: (await api.focused()).contextKey })
+  assert.equal(brief.summary.goal, 'Shared')
+  const reads = state.snapshots
+  state.id = 'identity:wt2:local:other'
+  assert.equal((await api.focused()).scope, 'manual')
+  state.id = workspace
+  assert.equal((await api.focused()).summary?.goal, 'Shared')
+  assert.equal(state.snapshots, reads)
+})
+
+test('restored workflow actions reject a changed report without replacing the remembered brief', async t => {
+  const { state, api, save } = await fixture(t)
+  state.manual = true
+  await save()
+  const workspace = { id:state.id, kind:'worktree', hostId:'local', projectId:'p', branch:'main', path:tmpdir() }
+  const methods = {}, data = new Map(), terminals = []
+  bindProfiles({
+    storage: { get: k => data.get(k), set: (k, v) => data.set(k, v) },
+    panels: { handle: (k, fn) => { methods[k] = fn }, post() {} },
+    host: { call: async (method, input) => {
+      if (method === 'workspace.readContext') return { workspaceId:state.id, branch:'main' }
+      if (method === 'workspace.list') return { workspaces:[workspace] }
+      if (method === 'project.list') return { projects:[{ id:'p', kind:'git', hostId:'local', path:'/work/books' }] }
+      if (method === 'terminal.create') { terminals.push(input); return { terminalId:'new' } }
+      if (method === 'terminal.focus') return { focused:true }
+    } }
+  }, { settings: async () => ({profileActions:true}), focused:api.workflowFocused })
+  await methods['profiles.save']({ profile:{id:'sample', name:'Sample', enabled:true, projectPrefix:'p', shell:'posix', reviewHost:'example.org', steps:[{label:'Status', kind:'push', argv:['git','status']}]} })
+  const loadFor = (await api.focused()).contextKey
+  await api.focused({loadFor})
+  await methods['workflow.view']({loadFor})
+  const restored = await methods['workflow.view']()
+  assert.equal(restored.state, 'actions')
+  await save('Updated report')
+  await assert.rejects(methods['workflow.terminal']({key:restored.key}), /changed/i)
+  assert.deepEqual(terminals, [])
+  assert.equal((await api.focused()).summary.goal, 'Shared')
 })
 
 test('overlapping exclusions survive restart, apply to future workspaces, and are not matched by display name', async t => {

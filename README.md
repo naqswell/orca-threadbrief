@@ -2,6 +2,8 @@
 
 Threadbrief puts the selected Orca session’s last finished reply in the sidebar. Switch tabs and the brief follows. If the agent starts another turn, you can keep reading the previous result. To have a model write a new recap, preview the request and start a separate agent session.
 
+For a long task, choose **Handoff → Copy instructions** and paste them into your next message in the same conversation. After the agent replies, **Save checkpoint** keeps its decisions, checks and next steps on your desktop. Writing uses that agent’s usual tokens, without a second recap session. [How checkpoints work](docs/getting-started.md#keep-a-running-handoff-in-the-same-session).
+
 <picture>
   <source media="(prefers-reduced-motion: reduce)" srcset="assets/threadbrief-demo.png">
   <img src="assets/threadbrief-demo.gif" alt="Threadbrief shows the workshop notes from session history. Switching to Workshop invite shows its saved Goal, Done and Next. The handoff stays visible with an Agent working indicator during a new turn." width="960">

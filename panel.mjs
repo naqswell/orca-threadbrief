@@ -51,7 +51,7 @@ async function copyText(text) {
   input.setAttribute('aria-label', 'Text to copy')
   input.style.position = 'fixed'
   input.style.left = '-9999px'
-  const container = dialog.open ? dialog : document.body
+  const container = document.querySelector('dialog[open]') ?? document.body
   container.append(input)
   input.select()
   try {
@@ -117,7 +117,7 @@ function drawSummary(view, workflow) {
   if (view.title) node('h1', view.title, header)
   if (view.outcome) {
     const section = node('section', undefined, main, 'history')
-    node('h2', 'From session history', section)
+    node('h2', 'Last agent reply', section)
     renderMarkdown(node('div', undefined, section), view.outcome, openProseLink)
     return
   }
@@ -134,8 +134,13 @@ function drawSummary(view, workflow) {
     button(main, 'How summaries work', () => openSettings(true)).className = 'guide-link'
     return
   }
-  node('p', view.scope === 'worktree' ? 'Shared with this worktree' : 'Saved for this session', header, 'muted')
-  fields(header, [['Goal', summary.goal], ['Done', summary.done], ['Next', summary.next]])
+  const cp = summary.checkpoint
+  node('p', cp ? `Session handoff · checkpoint ${cp.revision}` : view.scope === 'worktree' ? 'Shared with this worktree' : 'Saved for this session', header, 'muted')
+  fields(header, [['Goal', summary.goal], ['Done', summary.done], ['Decisions', cp?.decisions], ['Checks', cp?.checks], ['Open questions', cp?.open], ['Next', summary.next]])
+  if (cp) button(header, 'Copy saved handoff', event => run(event.currentTarget, () => {
+    const { goal, done, next } = summary
+    return copyText(JSON.stringify({ goal, done, next, ...cp }, null, 2))
+  }, 'Handoff copied. Paste it only where you want to share it.', 'Could not copy handoff.')).className = 'guide-link'
   const result = summary.result
   if (result) {
     const section = node('section', undefined, main, `result ${result.status === 'blocked' ? 'blocked' : ''}`)
@@ -284,12 +289,9 @@ function resetReader() {
   pendingUpdate(false)
 }
 refreshBrief.addEventListener('click', async () => {
-  const before = window.scrollY, context = displayedContext
   refreshBrief.disabled = true
-  try {
-    await refresh(false, true, manualKey)
-    if (context === displayedContext) window.scrollTo(0, before)
-  } finally { refreshBrief.disabled = false }
+  try { await refresh(false, true, manualKey) }
+  finally { refreshBrief.disabled = false }
 })
 async function refresh(leaving = false, apply = true, loadFor) {
   if (document.hidden) return
@@ -376,6 +378,7 @@ function pause() {
 api.plugin.on('summary.changed', ({ reason } = {}) => {
   const privateChange = reason === 'exclusions' || reason === 'history-setting'
   const leaving = reason === 'workspace' || reason === 'selection' || privateChange
+  if (leaving && handoff.open) handoff.close()
   if (privateChange || (leaving && manualKey)) { main.replaceChildren(); main.hidden = true; rendered = undefined }
   if (leaving) resetReader()
   if (leaving || reason === 'session' || reason === 'settings') clearRecap()
@@ -457,7 +460,7 @@ async function loadPreferences() {
   try {
     const values = await api.settings.get()
     if (revision !== settingsRevision) return
-    const resume = pauseWhileReading && values.pauseWhileReading === false && !refreshBrief.hidden
+    const resume = pauseWhileReading && values.pauseWhileReading === false && refreshBrief.hasAttribute('data-pending')
     pauseWhileReading = values.pauseWhileReading !== false
     if (resume) void refresh(false, true)
     document.querySelector('#panel-icon').hidden = values.showPanelIcon === false
@@ -484,6 +487,7 @@ const agentHint = document.querySelector('#agent-hint')
 const modelInput = document.querySelector('#recap-model'), modelForm = document.querySelector('#recap-model-form')
 const saveModel = modelForm.querySelector('button')
 const modelChoice = document.querySelector('#model-choice'), addModel = ' add '
+const effortField = document.querySelector('#effort-field'), effortChoice = document.querySelector('#effort-choice')
 const historyKey = agent => `recap-models-${agent}`
 let savingChoice = false, currentCatalogKey
 let sourceHint = '', listHint = '', historyEnabled = true, recapPending = false
@@ -492,6 +496,7 @@ function updatePreviewControl() {
   const editing = !modelForm.hidden
   saveModel.disabled = !modelInput.value.trim() || savingChoice
   modelChoice.disabled = savingChoice || recapAgent.disabled || !recapAgent.value
+  effortChoice.disabled = modelChoice.disabled || editing
   previewRecap.disabled = editing || savingChoice || recapPending || recapAgent.disabled || !recapAgent.value || Boolean(agentHint.textContent)
 }
 function clearRecap() {
@@ -506,10 +511,11 @@ async function showStrategy(values, revision) {
   const instant = mode === 'instant'
   document.querySelector('#recap-mode-label').textContent = instant ? 'Instant' : mode === 'brief' ? 'Brief' : 'Detailed'
   document.querySelector('#strategy-hint').textContent = instant ? 'Shows existing text. No extra tokens or agent session.' :
-    `${mode === 'brief' ? 'Up to 12 recent entries and 3,000 characters; asks for a 90-word recap.' : 'Up to 48 recent entries and 12,000 characters; asks for a 400-word handoff.'} Your agent’s usual usage limits and pricing apply.`
+    `${mode === 'brief' ? 'Up to 12 recent entries and 3,000 characters; asks for up to 90 words.' : 'Up to 48 recent entries and 12,000 characters; asks for up to 400 words.'} Applies when you start a new recap, not when you refresh the last reply. Your agent’s usual pricing applies.`
   document.querySelector('#recap-controls').hidden = instant
   if (instant || !dialog.open || !recapSettings.open) return
   const storedModel = (values.recapModel ?? '').trim()
+  effortField.hidden = true
   historyEnabled = values.historyOutcome !== false
   recapAgent.disabled = true
   currentCatalogKey = undefined
@@ -555,13 +561,25 @@ async function showStrategy(values, revision) {
   }
   modelChoice.replaceChildren(new Option('Use agent’s default', ''), ...(group.children.length ? [group] : []), ...Array.from(choices, m => new Option(m, m)), new Option('Add a model…', addModel))
   modelChoice.value = storedModel
+  const levels = reported.find(m => m.id === storedModel)?.efforts ?? []
+  const effort = values.recapEffort || ''
+  const missing = effort && !levels.includes(effort)
+  effortChoice.replaceChildren(new Option('Agent default', ''), ...levels.map(level => new Option(level, level)))
+  if (missing) {
+    const unavailable = new Option(`${effort} (unavailable here)`, effort)
+    unavailable.disabled = true
+    effortChoice.add(unavailable)
+    listHint ||= 'Choose an available reasoning effort or Agent default.'
+  }
+  effortChoice.value = effort
+  effortField.hidden = !levels.length && !effort
   modelForm.hidden = true
   document.querySelector('#model-help').textContent = `Copy the exact identifier from ${recapAgent.selectedOptions[0]?.textContent || 'the agent'}’s model picker or settings. Threadbrief remembers it here.`
   updatePreviewControl()
 }
 dialog.addEventListener('close', clearRecap)
 modelInput.addEventListener('input', updatePreviewControl)
-async function saveChoice(agent, model, remember = false) {
+async function saveChoice(agent, model, remember = false, effort = '') {
   if (savingChoice) return
   clearRecap()
   savingChoice = recapAgent.disabled = true
@@ -572,6 +590,7 @@ async function saveChoice(agent, model, remember = false) {
       const key = historyKey(agent), saved = await api.storage.get(key)
       await api.storage.set(key, [model, ...(Array.isArray(saved) ? saved.filter(m => m !== model) : [])].slice(0, 16))
     }
+    if ((await api.settings.get('recapEffort') || '') !== effort) await api.settings.set('recapEffort', effort)
     if (agent !== await api.settings.get('recapAgent')) {
       await api.settings.set('recapModel', '')
       await api.settings.set('recapAgent', agent)
@@ -595,6 +614,7 @@ modelForm.addEventListener('submit', event => {
   void saveChoice(recapAgent.value, model, true)
 })
 recapAgent.addEventListener('change', () => { void saveChoice(recapAgent.value, '') })
+effortChoice.addEventListener('change', () => { void saveChoice(recapAgent.value, modelChoice.value, false, effortChoice.value) })
 previewRecap.addEventListener('click', async () => {
   clearRecap()
   const revision = recapRevision
@@ -604,7 +624,7 @@ previewRecap.addEventListener('click', async () => {
     const p = await request('recap.preview', { agent: recapAgent.value })
     if (revision !== recapRevision) return
     recapToken = p.token
-    document.querySelector('#recap-destination').textContent = `${p.title} → ${p.agent} / ${p.model || 'Agent default'} on ${p.environment} · ${p.prompt.length.toLocaleString()} characters including instructions`
+    document.querySelector('#recap-destination').textContent = `${p.title} → ${p.agent} / ${p.model || 'Agent default'} on ${p.environment} · Effort: ${p.effort || 'Agent default'} · ${p.prompt.length.toLocaleString()} characters including instructions`
     document.querySelector('#recap-text').textContent = p.prompt
     document.querySelector('#recap-preview').hidden = false
   } catch (error) { if (revision === recapRevision) recapStatus.textContent = message(error, 'Could not preview recap.') }
@@ -637,11 +657,11 @@ dialog.addEventListener('change', async ({ target }) => {
   }
 })
 api.settings.onDidChange(({ key }) => {
-  if (key === 'recapAgent' || key === 'recapModel') clearRecap()
+  if (key === 'recapAgent' || key === 'recapModel' || key === 'recapEffort') clearRecap()
   if (dialog.open || key === 'showPanelIcon' || key === 'pauseWhileReading') void loadPreferences()
 })
 api.storage.onDidChange(({ key }) => {
-  if (key === currentCatalogKey && dialog.open && recapSettings.open && modelForm.hidden) void loadPreferences()
+  if (key === currentCatalogKey && dialog.open && recapSettings.open && modelForm.hidden) { clearRecap(); void loadPreferences() }
 })
 const exclusionsPanel = document.querySelector('#exclusions')
 const exclusionStatus = document.querySelector('#exclusion-status')
@@ -689,6 +709,40 @@ function openSettings(showGuide = false) {
   if (workflows.open) void listProfiles()
 }
 document.querySelector('#open-settings').addEventListener('click', () => openSettings())
+const handoff = document.querySelector('#handoff-dialog'), checkpointStatus = document.querySelector('#checkpoint-status')
+const saveCheckpoint = document.querySelector('#save-checkpoint'), checkpointTarget = document.querySelector('#checkpoint-target')
+let handoffVisit = 0, checkpointKey
+handoff.addEventListener('close', () => { ++handoffVisit; checkpointKey = undefined })
+document.querySelector('#close-handoff').addEventListener('click', () => handoff.close())
+document.querySelector('#open-handoff').addEventListener('click', async () => {
+  const visit = ++handoffVisit
+  checkpointKey = undefined
+  checkpointStatus.textContent = ''
+  checkpointTarget.textContent = 'Checking selected session…'
+  saveCheckpoint.disabled = true
+  handoff.showModal()
+  try {
+    const target = await request('checkpoint.target')
+    if (visit !== handoffVisit || !handoff.open) return
+    checkpointKey = target.key
+    checkpointTarget.textContent = `${target.title} · ${target.environment === 'local' ? 'This desktop' : 'Paired server'}`
+    saveCheckpoint.disabled = false
+  } catch (error) { if (visit === handoffVisit) checkpointTarget.textContent = message(error, 'Select a finished session with history enabled, then reopen Handoff.') }
+})
+document.querySelector('#copy-checkpoint').addEventListener('click', event => run(event.currentTarget,
+  () => copyText(document.querySelector('#checkpoint-prompt').textContent), 'Copied. Paste into the original conversation.', 'Could not copy.', checkpointStatus))
+saveCheckpoint.addEventListener('click', async () => {
+  if (!checkpointKey) return
+  const visit = handoffVisit, key = checkpointKey, loadFor = manualKey
+  saveCheckpoint.disabled = true
+  try {
+    const { revision } = await request('checkpoint.capture', { key })
+    if (visit !== handoffVisit) return
+    checkpointStatus.textContent = `Checkpoint ${revision} saved on this desktop.`
+    if (loadFor === manualKey) await refresh(false, true, loadFor)
+  } catch (error) { if (visit === handoffVisit) checkpointStatus.textContent = message(error, 'Not saved.') }
+  finally { if (visit === handoffVisit) saveCheckpoint.disabled = false }
+})
 recapSettings.addEventListener('toggle', () => {
   if (recapSettings.open && dialog.open) void loadPreferences()
   else clearRecap()

@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs'
-import { catalogKey, validateModels } from './model-catalog.mjs'
+import { catalogKey, validateModels, validEffort } from './model-catalog.mjs'
 
 const manifest = JSON.parse(readFileSync(new URL('./orca-plugin.json', import.meta.url), 'utf8'))
 const settings = new Map(manifest.contributes.settings.map(setting => [setting.key, setting]))
@@ -11,6 +11,7 @@ export function validateConfig(patch) {
     const spec = settings.get(key), value = patch[key]
     if (!spec || typeof value !== spec.type || (spec.enum && !spec.enum.includes(value)) ||
         (typeof value === 'string' && ((spec.maxLength !== undefined && value.length > spec.maxLength) || /[\u0000-\u001f\u007f]/u.test(value))) ||
+        (key === 'recapEffort' && value && !validEffort(value)) ||
         (key === 'recapModel' && value && (/^-/u.test(value) || /\s/u.test(value)))) {
       throw Error(`Invalid preference: ${String(key)}.`)
     }

@@ -8,6 +8,8 @@ Threadbrief shows the outcome of work in Orca. The scope of a summary tells the 
 
 **History outcome**: The last substantive reply from a completed agent session on its own Orca host, shown in the agent’s own words. It is not a generated or saved summary.
 
+**Session checkpoint**: A numbered handoff written by the original agent when asked, then saved by the reader on the desktop. Each revision replaces the previous one for that server and session. Saving one does not launch a recap agent.
+
 **Recap strategy**: The user's choice between reading an existing outcome and asking a separate agent for a brief recap or a detailed handoff. Selecting a strategy is not consent to send a conversation excerpt.
 
 **Summary exclusion**: A local decision not to read or display summaries for a session, workspace or project. It does not stop the agent or erase its work.

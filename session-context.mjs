@@ -69,7 +69,7 @@ export async function focusedSession(contextId, focus, command = orcaJson) {
   const paired = focus.host?.startsWith('runtime:')
   const environment = paired ? focus.host.slice(8) : 'local'
   const stable = contextId.startsWith('identity:wt2:')
-  if (!safeEnvironment(environment) || ((paired || !stable) && focus.workspace !== contextId)) return null
+  if ((focus.host && focus.host !== 'local' && !paired) || !safeEnvironment(environment) || (paired && environment === 'local') || ((paired || !stable) && focus.workspace !== contextId)) return null
   if (focus.kind && !['agent-session', 'terminal'].includes(focus.kind)) return null
   if (stable && !paired && focus.workspace !== contextId) {
     const found = await command(['worktree', 'show', '--environment', 'local', '--worktree', contextId])

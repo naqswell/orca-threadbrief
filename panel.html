@@ -13,6 +13,7 @@
       <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7v5h-5"/><path d="M19.6 11a8 8 0 1 0-2 6.5"/></svg>
       <span>Refresh</span>
     </button>
+    <button type="button" id="open-handoff" aria-haspopup="dialog" title="Keep a handoff for this session">Handoff</button>
     <button id="open-settings" type="button" aria-label="Settings" title="Settings" aria-haspopup="dialog">
       <img id="panel-icon" src="./assets/session-summary.png" width="24" height="24" alt="" hidden>
       <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 3 1-1h4l1 3 2 1 3-.5 2 3.5-2 2v2l2 2-2 3.5-3-.5-2 1-1 3h-4l-1-3-2-1-3 .5L2 15l2-2v-2L2 9l2-3.5 3 .5 2-1Z"/><circle cx="12" cy="12" r="3"/></svg>
@@ -36,6 +37,26 @@
     <main aria-label="Summary" aria-busy="true" tabindex="0" hidden></main>
     <button id="manual-load" type="button" hidden>Load brief</button>
   </div>
+  <dialog id="handoff-dialog" aria-labelledby="handoff-title" closedby="any">
+    <div class="dialog-heading"><h2 id="handoff-title">Session handoff</h2><button type="button" id="close-handoff" autofocus>Close</button></div>
+    <p>Keep one handoff in the original session. Threadbrief never starts an agent for this.</p>
+    <section><h3>1. Ask your current agent</h3>
+      <p>Paste the instructions into a regular turn. Writing a checkpoint uses that agent’s normal tokens. Copying does not send anything.</p>
+      <details><summary>Read the instructions</summary><pre id="checkpoint-prompt">Only when I ask for a checkpoint, end your reply with the block below. Write a complete handoff in our conversation’s language. Carry forward still-relevant decisions and checks, replace obsolete information, and state any gaps in the history you can see. Each field is one line of at most 480 characters. Use “None” where appropriate. Increment revision for each new checkpoint. Do not start another agent or change any files to do this.
+
+```threadbrief-checkpoint
+{"revision":1,"goal":"…","done":"…","decisions":"…","checks":"…","open":"…","next":"…"}
+```
+Please write the first checkpoint now if this conversation has none; otherwise update the latest one.</pre></details>
+      <button type="button" id="copy-checkpoint">Copy instructions</button>
+    </section>
+    <section><h3>2. Save the completed checkpoint</h3>
+      <p>Save after the agent finishes, before its next reply. Only the marked handoff is kept on this desktop. Saving makes no model request.</p>
+      <p id="checkpoint-target" class="muted"></p>
+      <button type="button" id="save-checkpoint" disabled>Save checkpoint</button>
+    </section>
+    <p id="checkpoint-status" role="status"></p>
+  </dialog>
   <dialog id="settings-dialog" aria-labelledby="settings-title" closedby="any">
     <div class="dialog-heading"><h2 id="settings-title">Settings</h2><button id="close-settings" type="button" aria-label="Close settings" title="Close settings" autofocus><svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="m4 4 8 8m0-8-8 8"/></svg></button></div>
     <fieldset class="preference-group" disabled>
@@ -65,6 +86,7 @@
       <label>Orca agent <select id="recap-agent" aria-describedby="agent-hint" disabled><option value="">Loading agents…</option></select></label>
       <small id="agent-hint" role="status"></small>
       <label>Model <select id="model-choice" disabled><option value="">Use agent’s default</option></select></label>
+      <label id="effort-field" hidden>Reasoning effort <select id="effort-choice" aria-describedby="effort-hint"></select><small id="effort-hint">Higher levels can take longer and use more tokens.</small></label>
       <form id="recap-model-form" hidden>
         <label>Model identifier <input id="recap-model" required maxlength="256" spellcheck="false" autocomplete="off" aria-describedby="model-help"></label>
         <small id="model-help"></small>

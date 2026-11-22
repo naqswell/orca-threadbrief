@@ -6,7 +6,7 @@ If you want to know where you left off, you only need the plugin and a local age
 
 1. [Install the plugin](../README.md#install). Open a local agent conversation in Orca, or select one where the agent has already finished a task.
 2. For a quick trial, ask: **“I have six guests and eight chairs. How many chairs will be spare? Answer in one sentence.”** Wait for the answer. Leave the conversation tab selected; you don't have to close it.
-3. Open **Threadbrief** in the right sidebar. Under **From session history**, you should see the agent's answer about the two spare chairs. Switch to a different conversation and the panel follows that selection.
+3. Open **Threadbrief** in the right sidebar. Under **Last agent reply**, you should see the agent's answer about the two spare chairs. Switch to a different conversation and the panel follows that selection.
 
 Opening the panel displays a reply the agent already wrote, in its original language. It never starts a second model. The panel looks through the last 20 history entries for the latest assistant message with text, skips tool calls and short acknowledgements, and shows up to 1,600 characters before an ellipsis.
 
@@ -20,6 +20,24 @@ The worker remembers the last 12 manually loaded sessions in memory, separately 
 
 These buttons display existing material, including on a paired server. To ask a model for a new recap, use the preview and start buttons below. Turn off **Load briefs only on click** to resume automatic updates.
 
+## Keep a running handoff in the same session
+
+Use a checkpoint when one task spans many turns. Instead of asking another agent to reread a chat excerpt, ask the agent already doing the work to leave a handoff at a milestone.
+
+1. Open **Handoff → Copy instructions** in the panel. Copying reads no conversation and sends nothing. Paste into your next regular message in the **original** conversation. That message and the agent’s answer use its normal input and output tokens; Threadbrief cannot quote a price.
+2. When that turn finishes, click **Handoff → Save checkpoint** before another reply replaces it. Threadbrief checks the selected server and session, reads up to the 100 most recent entries through Orca, and saves only the block at the end of the latest assistant reply. This does not start an agent. The panel shows **Session handoff · checkpoint N**.
+3. At the next milestone, ask the same agent to update the checkpoint. Each revision is a **complete replacement**: it carries forward relevant decisions and evidence, not the whole transcript. Nothing runs between saves to maintain it. If the agent loses earlier context, use **Copy saved handoff** and paste the snapshot into your next turn.
+
+For agents: finish the reply with this fenced JSON block. Use the conversation’s language, one line of text per field (up to 480 characters). Start at revision 1 and increase it on each update. Use “None” for an empty field; do not invent missing history.
+
+````text
+```threadbrief-checkpoint
+{"revision":1,"goal":"Seat six guests.","done":"Reserved room A.","decisions":"Choose room A for its step-free entrance.","checks":"The venue confirmed eight seats.","open":"Final guest count.","next":"Send invitations."}
+```
+````
+
+Only the latest saved version is kept per server and session, on the desktop showing the panel. A duplicate changes nothing. An older, conflicting or malformed checkpoint cannot replace it. A report written with the CLI takes precedence and is never replaced by **Save checkpoint**. If you start midway through a long session, earlier facts the agent no longer sees cannot be recovered from this feature. With paired history off or the server disconnected, Threadbrief cannot capture a new checkpoint.
+
 ## Choose a strategy and an agent
 
 | Settings → Recap strategy | What it does | Extra model usage |
@@ -31,6 +49,8 @@ These buttons display existing material, including on a paired server. To ask a 
 Open **Settings → Recap strategy and model** to choose an agent installed in the selected workspace, even while a turn is running. Once the conversation finishes, choose **Preview recap request**. Read the destination and the exact prompt, including the excerpt. Tool calls and tool output are left out; ordinary messages may still contain private information. **Start recap in new session** opens a separate agent terminal in that workspace. Select the new terminal to read the answer there or in Threadbrief. The source conversation and its saved report are not changed.
 
 **Choose a model:** keep **Use agent’s default** or pick a named model under **Reported by**. If the list is empty, [ask the agent to register its models](configuration.md#let-an-agent-fill-the-model-picker). **Add a model…** still lets you pin an exact identifier yourself. Check the model and host in the preview. To unpin, choose **Use agent’s default**. In Orca’s plugin settings the same selection is **Preferred recap agent** and **Custom recap model (optional)**. Threadbrief does not retry a rejected launch with a different model.
+
+**Reasoning effort** appears below Model when the selected agent reports levels for that model on this host. Keep **Agent default** to leave the level up to the agent. A higher level may use more time and tokens; it does not increase the history window or word budget. The preview shows the exact effort requested. If a host stops offering it, choose another level before starting.
 
 With the field empty the recap uses the agent’s default model, not necessarily the one in the original tab. It uses the agent’s configured account and permissions either way. The prompt asks for a text-only answer; the plugin does not sandbox the agent. Character and word budgets are not token or price guarantees. Previewing and refreshing never launch a model. If history is disabled or the selection is excluded, no recap can start.
 
@@ -57,7 +77,8 @@ The panel shows the first available source, not a blend of conversations:
 | Label in the panel | Whose work it describes |
 | --- | --- |
 | **Saved for this session** | A report explicitly written for this Orca session. It wins even if there is a newer reply. |
-| **From session history** | The selected agent's last substantive reply after the session finishes. On by default for both local and paired sessions. |
+| **Session handoff · checkpoint N** | A snapshot written in the original conversation and saved by you. It does not change when the agent replies again. |
+| **Last agent reply** | The selected agent's last substantive reply, not a recap of the conversation. On by default for both local and paired sessions. |
 | **Shared with this worktree** | A saved report for the checkout. It can include other sessions' work; it isn't attributed to the selected agent. |
 
 Turning off **Use the agent’s last reply** disables history, including manual recap previews. It doesn't delete anything. No history is sent to an agent unless you confirm the preview.

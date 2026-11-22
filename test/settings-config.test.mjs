@@ -54,10 +54,11 @@ test('an agent replaces its reported models without changing pins or other hosts
   const set = (scope, models) => config({op:'set-models',value:{...scope,models}})
   prefs.recapModel = 'chosen'
   await set(remote, [{id:'remote-only'}])
-  await set(local, [{id:'one',name:'First'}, {id:'two'}])
+  await set(local, [{id:'one',name:'First',efforts:['low','high']}, {id:'two'}])
   await assert.rejects(set(local, [{id:'duplicate'}, {id:'duplicate'}]))
   await assert.rejects(set(local, [{id:'--prompt'}]))
-  assert.deepEqual(await list(local), [{id:'one',name:'First'}, {id:'two'}])
+  for (const efforts of ['high', ['--model'], ['high','high']]) await assert.rejects(set(local, [{id:'one',efforts}]))
+  assert.deepEqual(await list(local), [{id:'one',name:'First',efforts:['low','high']}, {id:'two'}])
   await set(local, [])
   assert.deepEqual(await list(local), [])
   assert.deepEqual(await list(remote), [{id:'remote-only'}])

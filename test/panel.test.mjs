@@ -13,7 +13,8 @@ async function exercisePanel(defaults) {
   const events = {}, prefs = { ...defaults }
   const summary = title => ({ title, contextKey: title, scope: 'session', outcome: title + ' outcome' })
   const loaded = new Map()
-  let inventories = 0, frameReads = 0
+  let inventories = 0, frameReads = 0, waitForLoad
+  let checkpointSaves = 0
   let first, view = new Promise(resolve => { first = resolve })
   window.orca = {
     plugin: { on: (k, fn) => { events[k] = fn }, request: async (k, input) => {
@@ -21,14 +22,22 @@ async function exercisePanel(defaults) {
         if (!prefs.manualLoad) return view
         if (!input.loadFor) return loaded.get(view.contextKey) ?? { manual: true, scope: 'manual', contextKey: view.contextKey }
         if (input.loadFor !== view.contextKey) throw Error('Wrong manual request')
+        if (waitForLoad) await waitForLoad
         const brief = { ...view, manual: true }
         loaded.set(view.contextKey, brief)
         return brief
       }
       if (k === 'frame') { frameReads++; return null }
       if (k === 'workflow.view') return { state: 'none' }
+      if (k === 'checkpoint.target') return { key:'approved-turn', title:'On demand', environment:'peer' }
+      if (k === 'checkpoint.capture') {
+        if (input.key !== 'approved-turn') throw Error('Wrong checkpoint target')
+        checkpointSaves++
+        view = { ...view, outcome:null, summary:{ goal:'Plan workshop', done:'Room booked', next:'Send invitations', checkpoint:{revision:3, decisions:'Room A', checks:'Capacity verified', open:'Guest count'} } }
+        return { revision:3 }
+      }
       if (k === 'recap.agents') { inventories++; return [{ id: 'a', name: 'Agent A', preferred: true, catalogKey:'catalog-a' }, { id: 'b', name: 'Agent B', catalogKey:'catalog-b' }] }
-      if (k === 'recap.preview') return { token: 'preview-a', title: 'Third', agent: 'a', model: prefs.recapModel, environment: 'local', prompt: 'Approved for Agent A' }
+      if (k === 'recap.preview') return { token: 'preview-a', title: 'Third', agent: 'a', model: prefs.recapModel, effort: prefs.recapEffort, environment: 'local', prompt: 'Approved for Agent A' }
     } },
     settings: { get: async key => key ? prefs[key] : prefs, set: async (key, value) => { prefs[key] = value; events.settings({ key }) }, onDidChange: fn => { events.settings = fn } },
     storage: { get: async key => JSON.parse(localStorage.getItem(key)), set: async (key, value) => { localStorage.setItem(key, JSON.stringify(value)); events.storage({key}) }, onDidChange: fn => { events.storage = fn } }
@@ -67,14 +76,22 @@ async function exercisePanel(defaults) {
   check(!$('#preview-recap').disabled, 'Open settings did not notice the session finished')
   const choice = $('#model-choice'), model = $('#recap-model'), form = $('#recap-model-form')
   check(choice.value === '' && form.hidden, 'Fresh install required a model identifier')
-  await window.orca.storage.set('catalog-a', [{id:'example/quick',name:'Quick'}]); await delay(5)
+  const effort = $('#effort-choice')
+  check($('#effort-field').hidden, 'Default model offered unconfirmed effort levels')
+  await window.orca.storage.set('catalog-a', [{id:'example/quick',name:'Quick',efforts:['low','high']}]); await delay(5)
   check(choice.value === '' && choice.querySelector('optgroup option')?.textContent.includes('Quick'), 'Agent registration did not update the open picker or changed the pin')
   choice.value = 'example/quick'; choice.dispatchEvent(new Event('change')); await delay(5)
   check(prefs.recapModel === 'example/quick', 'Selecting a reported name did not pin the exact ID')
+  check(!$('#effort-field').hidden && [...effort.options].map(o => o.value).join(',') === ',low,high', 'Wrong efforts for the pinned model')
+  effort.value = 'high'; effort.dispatchEvent(new Event('change')); await delay(5)
+  $('#preview-recap').click(); await delay(5)
+  check(prefs.recapEffort === 'high' && $('#recap-destination').textContent.includes('Effort: high'), 'Preview lost the selected effort')
   await window.orca.storage.set('catalog-a', []); await delay(5)
   check(choice.value === 'example/quick', 'Catalog replacement silently cleared a pin')
+  check($('#preview-recap').disabled && $('#recap-preview').hidden, 'Withdrawn effort left an actionable preview')
   choice.value = ''; choice.dispatchEvent(new Event('change')); await delay(5)
   check(![...choice.options].some(o => o.value === 'example/quick'), 'Withdrawn model was added to manual history')
+  check(!prefs.recapEffort && $('#effort-field').hidden, 'Changing model carried a stale effort')
   choice.selectedIndex = choice.options.length - 1; choice.dispatchEvent(new Event('change'))
   model.value = 'provider/version-1'; model.dispatchEvent(new Event('input'))
   check($('#preview-recap').disabled, 'Unsaved model allowed a preview')
@@ -129,6 +146,12 @@ async function exercisePanel(defaults) {
   check($('main .prose p') === paragraph && !refresh.hidden, 'Background update disturbed the manual brief or hid Refresh')
   refresh.click(); await delay(5)
   check($('main .prose p').textContent === 'Changed on host' && window.scrollY === y, 'Explicit refresh did not update in place')
+  waitForLoad = new Promise(resolve => { release = resolve })
+  refresh.click()
+  window.scrollTo(0, 300)
+  release(); await delay(5)
+  check(window.scrollY === 300, 'Slow refresh jumped back after the reader scrolled')
+  waitForLoad = undefined
   view = summary('Another session'); changed('selection')
   check(!document.body.innerText.includes('Changed on host'), 'Previous session remained visible')
   await delay(5)
@@ -143,6 +166,13 @@ async function exercisePanel(defaults) {
   check(pair && !pair.open && frameReads === 0, 'Restoring a manual report reread its images')
   pair.querySelector('summary').click(); await delay(20)
   check(frameReads === 2, 'Expanding the pair did not fetch its images')
+  $('#open-handoff').click(); await delay(5)
+  const handoff = $('#handoff-dialog')
+  check(handoff.open && handoff.scrollWidth <= handoff.clientWidth && handoff.innerText.includes('normal tokens') && $('#checkpoint-target').textContent.includes('Paired server') && !checkpointSaves, 'Opening handoff hid costs, the target, or captured without consent')
+  $('#save-checkpoint').click(); await delay(5)
+  check(checkpointSaves === 1 && $('#checkpoint-status').textContent.includes('3 saved'), 'Explicit capture did not confirm the checkpoint')
+  $('#close-handoff').click()
+  check($('main').innerText.includes('checkpoint 3') && $('main').innerText.includes('Capacity verified') && $('main').innerText.includes('Copy saved handoff'), 'Saved checkpoint did not replace the manual brief')
 }
 
 const chrome = [process.env.CHROME_PATH, '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', '/usr/bin/google-chrome', '/usr/bin/chromium', process.env.ProgramFiles && join(process.env.ProgramFiles, 'Google/Chrome/Application/chrome.exe')].find(p => p && existsSync(p))

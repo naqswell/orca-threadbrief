@@ -26,20 +26,24 @@ Check the returned values against the requested patch. On a failed or unconfirme
 
 Use `orca agent installed --environment local --worktree active --json` to discover agent IDs for a local workspace. For a paired workspace use its server selector and worktree ID instead. `recapAgent` is that installed agent's ID. `recapModel` is an identifier the agent accepts on the **source host**; the agent list is not a model catalog. Set both in one patch when pinning a model. Use `"recapModel":""` for the agent's configured default; use `"recapAgent":""` and `"recapModel":""` for the host default. There is no need to guess a model ID or start a paid test session.
 
+From **0.2.8**, set `recapEffort` to a level listed in that model's `efforts` on the target host. Set it to `""` to use the agent default. Include all three keys when switching a pin from the CLI, for example `{"recapAgent":"codex","recapModel":"<reported model ID>","recapEffort":"high"}` if that model reports `high`. When clearing a model pin, also clear its effort. The worker checks the level again before launching.
+
 `manualLoad` controls **when the panel reads**. `summaryStrategy` controls **what a requested recap does**: `instant` displays existing material; `brief` and `handoff` offer a preview and a separate start action. Neither setting authorizes sending an excerpt to a provider. See [strategies and budgets](getting-started.md#choose-a-strategy-and-an-agent).
 
 ### Let an agent fill the model picker
 
 With **Threadbrief 0.2.6 or later**, ask the agent: “List the chat models your configured account can use on this Orca host and register them in Threadbrief. Leave my selected model alone.” The agent should use its own model-list command or authenticated model picker, not a public list of everything a provider sells. If it cannot enumerate available models, leave the existing catalog alone.
 
-For OMP, run this on the desktop when the source environment is `local`. It uses OMP's launch selector, not a display name. No chat is started.
+For OMP on **0.2.8 or later**, run this on the desktop when the source environment is `local`. It imports each model's launch selector and reported thinking levels. No chat is started.
 
 ```sh
-omp models --json | jq -e '[.models[] | {id: .selector, name}] | select(length > 0)' | node threadbrief-config.mjs set-models - --agent omp --environment local --plugin local.session-summary
+omp models --json | jq -e '[.models[] | {id:.selector, name, efforts:(.thinking // [])}] | select(length > 0)' | node threadbrief-config.mjs set-models - --agent omp --environment local --plugin local.session-summary
 node threadbrief-config.mjs models --agent omp --environment local --plugin local.session-summary
 ```
 
-For other agents, pass a UTF-8 JSON file instead of `-`. Use an array such as `[{"id":"provider/exact-id","name":"Display name"}]`, replacing the example with real launch IDs; `name` is optional. For a paired server, collect the list **on that server** using the relevant account, transfer only the IDs and labels to the desktop, then run `set-models` on the desktop with the server’s **environment ID** and actual Orca agent ID. No credentials belong in this file.
+For Codex, select only models the account lists. Use `codex debug models | jq -e '[.models[] | select(.visibility=="list") | {id:.slug, name:.display_name, efforts:[.supported_reasoning_levels[]?.effort]}] | select(length > 0)'` as the input to `set-models - --agent codex` with the same environment and plugin flags.
+
+For other agents, pass a UTF-8 JSON file instead of `-`. Each entry needs a real launch `id`; `name` and `efforts` are optional. Existing lists without levels still work with **Agent default**. For a paired server, collect the list **on that server** using its account, transfer only the IDs, labels and levels to the desktop, then register them there with the server’s **environment ID** and Orca agent ID. No credentials belong in this file.
 
 A successful write returns the environment, agent and number of models. **Settings → Recap strategy and model → Model** shows the list under **Reported by** for that agent on that host. Re-register after changing accounts or available models: each write replaces that one list. Send `[]` deliberately to clear it. A failed collection is not an empty catalog. Registration never pins a model or changes a previous pin.
 

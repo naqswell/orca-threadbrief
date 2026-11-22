@@ -116,9 +116,9 @@ export function bindProfiles(orca, { settings, focused }) {
   }
   orca.panels.handle('profiles.delete', async ({id} = {}) => remove(id))
 
-  async function view(draft, loadFor) {
+  async function view(draft, loadFor, revalidate = false) {
     const context = await host.call('workspace.readContext')
-    const selection = await focused({ loadFor })
+    const selection = await focused({ loadFor }, revalidate)
     if (selection?.scope === 'excluded' || selection?.scope === 'manual') return {state:'none'}
     const summary = selection?.summary
     const bareReview = knownReview(summary)
@@ -164,7 +164,7 @@ export function bindProfiles(orca, { settings, focused }) {
       return {label:step.label, command}
     })
     const custom = Boolean(review && reviewLink(review.url, profile.reviewHost) && await trustedOpener(profile))
-    const latest = await focused({ loadFor })
+    const latest = await focused({ loadFor }, revalidate)
     const active = await host.call('workspace.readContext')
     if (JSON.stringify(latest) !== JSON.stringify(selection) || active?.workspaceId !== context.workspaceId || active.branch !== context.branch) throw Error('The active workspace changed. Refresh the panel.')
     const key = digest([context.workspaceId, context.branch, selection, ws, profile, selectedDraft, review, custom])
@@ -175,16 +175,16 @@ export function bindProfiles(orca, { settings, focused }) {
     return {state:'actions', ...common, actions, ...(hasReviewStep ? {draft:selectedDraft} : {})}
   }
   orca.panels.handle('workflow.view', async ({draft, key, loadFor} = {}) => {
-    if (draft !== undefined) await fresh(key, 'actions')
+    if (draft !== undefined) await fresh(key, 'actions', false)
     const result = await view(draft, loadFor)
-    if (draft !== undefined) await fresh(key, 'actions')
+    if (draft !== undefined) await fresh(key, 'actions', false)
     if (result.key) { issued.clear(); issued.set(result.key, { draft, loadFor }) }
     return result
   })
-  async function fresh(key, state) {
+  async function fresh(key, state, revalidate = true) {
     if (typeof key !== 'string' || !issued.has(key)) throw Error('The workflow changed. Refresh the panel.')
     const { draft, loadFor } = issued.get(key)
-    const result = await view(draft, loadFor)
+    const result = await view(draft, loadFor, revalidate)
     if (result.key !== key || result.state !== state) throw Error('The workflow changed. Refresh the panel.')
     return result
   }

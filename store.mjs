@@ -51,6 +51,11 @@ export function summary(value) {
   const goal = text(value.goal), done = text(value.done), next = text(value.next)
   if (!goal || !done || !next) throw Error('Invalid summary text.')
   const out = { goal, done, next, links: linkMap(value.links ?? {}) }
+  if (value.checkpoint !== undefined) {
+    const { revision, decisions, checks, open } = value.checkpoint ?? {}
+    if (!Number.isSafeInteger(revision) || revision < 1 || !text(decisions) || !text(checks) || !text(open)) throw Error('Invalid session checkpoint.')
+    out.checkpoint = { revision, decisions, checks, open }
+  }
   if (typeof value.dispatch === 'string' && /^[\w-]{1,128}$/u.test(value.dispatch)) out.dispatch = value.dispatch
   if (value.result !== undefined) {
     const r = value.result
@@ -132,7 +137,7 @@ export async function readSnapshot(root, parts, name, hash, includePrivate = fal
   } catch (error) { if (error.code === 'ENOENT') return null; throw error }
 }
 
-export async function saveSession(root, environment, id, value) {
+export async function saveSession(root, environment, id, value, shouldReplace) {
   if (!safeEnvironment(environment)) throw Error('Invalid environment ID.')
   const name = sessionFilename(id)
   const record = summary(value)
@@ -148,6 +153,7 @@ export async function saveSession(root, environment, id, value) {
   const lock = await open(lockPath, 'wx', 0o600)
   try {
     await writeFile(temporary, serialized, { flag: 'wx', mode: 0o600 })
+    if (shouldReplace && !await shouldReplace()) return target
     await rename(temporary, target)
   } finally {
     await lock.close()

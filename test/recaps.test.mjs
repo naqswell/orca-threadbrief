@@ -2,11 +2,14 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { bindRecaps } from '../recaps.mjs'
 import { orcaJson } from '../session-context.mjs'
+import { catalogKey } from '../model-catalog.mjs'
 
 function fixture() {
   const handlers = {}, calls = [], reads = []
   const state = { strategy: 'instant', key: 'original', id: 'session', historyId: 'session', excluded: false }
   const orca = { panels: { handle: (name, fn) => { handlers[name] = fn } }, host: { call: async (name, input) => { calls.push([name, input]); return name === 'agent.launch' ? { terminalId: 'issued' } : { focused: true } } } }
+  const catalogs = new Map()
+  orca.storage = { get: async key => catalogs.get(key) }
   const command = async args => {
     if (args[1] === 'installed') return { agents: [{ id: 'alternative', name: 'Alternative', default: true }] }
     if (args[1] === 'launch') { calls.push(args); if (state.refused) throw Error('Unknown model'); return { outcome: { kind: 'terminal', handle: 'new-terminal' } } }
@@ -14,8 +17,8 @@ function fixture() {
     return { orcaSessionId: state.historyId, entries: [{ role: 'user', kind: 'message', text: 'Context '.repeat(2400) }, { role: 'assistant', kind: 'message', text: 'tool private', tools: ['tool'] }, { role: 'user', kind: 'message', text: 'Question?' }, { role: 'assistant', kind: 'message', text: 'One answer.' }] }
   }
   const target = async () => ({ environment: state.environment ?? 'local', worktree: 'id:original-ws' })
-  bindRecaps(orca, { settings: async () => ({ summaryStrategy: state.strategy, recapModel: state.model, recapAgent: state.agent }), target, source: async () => { if (state.excluded) throw Error('History off'); return { ...await target(), key: state.key, id: state.id, workspaceId: 'original-ws' } }, command })
-  return { state, calls, reads, preview: () => handlers['recap.preview']({ agent: 'alternative' }), start: (p, ctx) => handlers['recap.start'](p, ctx) }
+  bindRecaps(orca, { settings: async () => ({ summaryStrategy: state.strategy, recapModel: state.model, recapAgent: state.agent, recapEffort: state.effort }), target, source: async () => { if (state.excluded) throw Error('History off'); return { ...await target(), key: state.key, id: state.id, workspaceId: 'original-ws' } }, command })
+  return { state, calls, reads, catalogs, preview: () => handlers['recap.preview']({ agent: 'alternative' }), start: (p, ctx) => handlers['recap.start'](p, ctx) }
 }
 
 for (const [strategy, entries, budget] of [['brief', '12', 3000], ['handoff', '48', 12000]]) {
@@ -55,6 +58,27 @@ for (const environment of ['local', 'peer']) {
     f.state.agent = 'another-agent'
     await assert.rejects(f.start(stale), /preferred agent changed/)
     assert.equal(f.calls.length, 2)
+  })
+  test(`effort on ${environment} is checked against its own catalog at preview and launch`, async () => {
+    const f = fixture(), model = 'example/model', agent = 'alternative'
+    Object.assign(f.state, {strategy:'handoff', environment, agent, model, effort:'high'})
+    f.catalogs.set(catalogKey(environment === 'local' ? 'peer' : 'local', agent), [{id:model, efforts:['high']}])
+    await assert.rejects(f.preview(), /reasoning effort/)
+    assert.deepEqual(f.reads, [])
+    const key = catalogKey(environment, agent)
+    f.catalogs.set(key, [{id:model, efforts:['low','high']}])
+    const preview = await f.preview()
+    assert.equal(preview.effort, 'high')
+    f.state.effort = 'low'
+    await assert.rejects(f.start(preview), /changed/)
+    const stale = await f.preview()
+    f.catalogs.set(key, [{id:model, efforts:['high']}])
+    await assert.rejects(f.start(stale), /reasoning effort/)
+    assert.deepEqual(f.calls, [])
+    f.state.effort = 'high'
+    const approved = await f.preview()
+    await f.start(approved)
+    assert.deepEqual(f.calls[0], ['agent','launch','--environment',environment,'--worktree','id:original-ws','--agent',agent,'--surface','terminal','--model',model,'--effort','high','--prompt',approved.prompt])
   })
 }
 

@@ -123,7 +123,7 @@ export function bindSources(orca, { settings, reveal, roots = [directory, legacy
     listeners.add(panel?.id ?? 'summary')
     if (!timer) { timer = setInterval(() => { void tick() }, interval); timer.unref?.() }
   }
-  async function readFocused({ listen: subscribe, loadFor } = {}, { panel } = {}, includePublication = false) {
+  async function readFocused({ listen: subscribe, loadFor } = {}, { panel } = {}, includePublication = false, revalidate = false) {
     if (subscribe) listen(panel)
     const start = generation
     const [active, prefs] = await Promise.all([context(), settings()])
@@ -150,10 +150,14 @@ export function bindSources(orca, { settings, reveal, roots = [directory, legacy
     const slot = includePublication ? 'workflow' : 'panel'
     if (manual && !loadFor) {
       await verifySelection(start, workspaceId, key)
-      const saved = !excluded && session && manualBriefs.get(contextKey)
+      const saved = !excluded && manualBriefs.get(contextKey)
       if (!saved?.[slot]) return welcome()
-      if (!includePublication) { current.source = saved.source; observedPane = selection = current }
-      return includePublication ? saved.workflow : { ...saved.panel, contextKey: loadKey }
+      if (!includePublication) {
+        current.source = saved.source
+        observedPane = selection = current
+        return { ...saved.panel, contextKey: loadKey }
+      }
+      if (!revalidate) return saved.workflow
     }
     let working = false
     let view = session ? { scope: 'session', title: session.title, summary: null } : { scope: 'none', summary: null }
@@ -194,7 +198,7 @@ export function bindSources(orca, { settings, reveal, roots = [directory, legacy
       let address = null
       const paired = selected?.host?.startsWith('runtime:')
       if (identity(workspaceId) && selected && (!selected.host || selected.host === 'local')) address = { environment: 'local', worktree: workspaceId }
-      else if (paired && selected.workspace === workspaceId && safeEnvironment(selected.host.slice(8))) {
+      else if (paired && selected.host !== 'runtime:local' && selected.workspace === workspaceId && safeEnvironment(selected.host.slice(8))) {
         const environment = selected.host.slice(8)
         address = identity(workspaceId) ? { environment, worktree: workspaceId } : await pairedAddress(workspaceId, command, environment).catch(() => null)
       }
@@ -219,7 +223,7 @@ export function bindSources(orca, { settings, reveal, roots = [directory, legacy
     }
     if (!includePublication) { view.contextKey = manual ? loadKey : contextKey; view.working = working; view.manual = manual }
     if (view.scope !== 'none') view.workspaceId = workspaceId
-    if (manual && loadFor && session && !excluded) {
+    if (manual && loadFor && !excluded && (session || view.scope === 'worktree')) {
       const saved = manualBriefs.get(contextKey) ?? {}
       saved[slot] = view
       if (!includePublication) saved.source = current.source
@@ -231,7 +235,7 @@ export function bindSources(orca, { settings, reveal, roots = [directory, legacy
     return view
   }
   const focused = (input, ctx) => readFocused(input, ctx)
-  const workflowFocused = input => readFocused(input, {}, true)
+  const workflowFocused = (input, revalidate = false) => readFocused(input, {}, true, revalidate)
   async function frame({ id, hash } = {}) {
     const current = selection
     if (!current?.source || (id != null && id !== current.workspaceId) || typeof hash !== 'string' || !/^[0-9a-f]{64}$/u.test(hash)) throw Error('Image is unavailable.')
