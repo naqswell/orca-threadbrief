@@ -14,11 +14,12 @@ async function exercisePanel(defaults) {
   const summary = title => ({ title, contextKey: title, reportSessionKey:'peer/'+title, scope: 'session', outcome: title + ' outcome' })
   const loaded = new Map()
   let inventories = 0, frameReads = 0, waitForLoad
-  let checkpointSaves = 0
+  let checkpointSaves = 0, reportRequests = 0
   let targetDelay
   let first, view = new Promise(resolve => { first = resolve })
   window.orca = {
     plugin: { on: (k, fn) => { events[k] = fn }, request: async (k, input) => {
+      if (k.startsWith('checkpoint.') || k === 'recap.start') reportRequests++
       if (k === 'summary.focused') {
         if (!prefs.manualLoad) return view
         if (!input.loadFor) return loaded.get(view.contextKey) ?? { manual: true, scope: 'manual', contextKey: view.contextKey }
@@ -55,8 +56,8 @@ async function exercisePanel(defaults) {
   await import('/panel.mjs')
   await delay(370)
   const initial = $('#loading').getBoundingClientRect()
-  const create = () => [...document.querySelectorAll('main button')].find(b => b.textContent === 'Create report…')
-  const canSave = () => Boolean(create() && !create().closest('[inert]') && create().getClientRects().length || $('#open-handoff').getClientRects().length)
+  const create = () => $('#open-handoff')
+  const canSave = () => Boolean(create() && !create().disabled && !create().closest('[inert]') && create().getClientRects().length)
   const chooseEvidence = async () => {
     $('#preview-recap').click(); await delay(5)
     check($('#confirm-evidence').disabled && $('#recap-preview').hidden, 'Evidence was preselected')
@@ -67,7 +68,7 @@ async function exercisePanel(defaults) {
   first({...summary('First'), earlierReplies:['Checked **36 corrections**.']})
   await delay(10)
   check($('main h1')?.textContent === 'First', 'First session did not render')
-  check(!$('main details').open && $('main').innerText.includes('No report yet') && !$('main').innerText.includes('First outcome'), 'Quotes presented as a report')
+  check(!$('main details').open && $('main').innerText.includes('First outcome') && !$('main').innerText.includes('36 corrections'), 'Latest reply was hidden or earlier replies were expanded')
   $('main details summary').click()
   check($('main .history strong')?.innerText === '36 corrections' && $('main').innerText.indexOf('First outcome') < $('main').innerText.indexOf('36 corrections'), 'Earlier evidence missing or out of order')
   const refreshHint = $('#refresh-hint')
@@ -75,6 +76,10 @@ async function exercisePanel(defaults) {
   check(getComputedStyle(refreshHint).visibility === 'visible' && $('#refresh-brief').getAttribute('aria-describedby') === refreshHint.id, 'Refresh description unavailable on keyboard focus')
   document.dispatchEvent(new KeyboardEvent('keydown', {key:'Escape'}))
   check(!refreshHint.getClientRects().length, 'Escape did not dismiss the Refresh description')
+  view = { ...summary('New session'), outcome: null, working: true, emptyReason: 'waiting' }
+  changed('selection'); await delay(5)
+  check(!create() && !$('main .latest-reply') && $('main .empty-hint')?.innerText, 'A session waiting for its first answer offered an empty summary action')
+  view = summary('First'); changed('selection'); await delay(5)
   let release
   let allowTarget
   targetDelay = new Promise(r => { allowTarget = r })
@@ -83,7 +88,7 @@ async function exercisePanel(defaults) {
   check(!$('#handoff-dialog').open, 'Stale Create opened before Orca confirmed the current session')
   changed('selection'); await delay(5)
   allowTarget(); await delay(5); targetDelay = undefined
-  check(!$('main section button') && !$('#handoff-dialog').open && $('main').innerText.includes('Room booked'), 'Late preflight opened Create over a saved report')
+  check(!create() && !$('#handoff-dialog').open && $('main').innerText.includes('Room booked'), 'Late request opened a summary action over a writer-owned report')
   view = summary('First'); changed('selection'); await delay(5)
   view = new Promise(r => { release = r }); changed('session')
   check(create().disabled, 'Create remained actionable while the next brief was loading')
@@ -156,12 +161,11 @@ async function exercisePanel(defaults) {
   prefs.recapAgent = 'b'; events.settings({ key: 'recapAgent' }); await delay(5)
   check($('#recap-agent').value === 'b' && $('#recap-preview').hidden, 'A preview for the previous agent remained actionable')
   $('#close-settings').click(); $('main').focus()
-  if (!$('main details.history').open) $('main details.history summary').click()
   const text = $('main .prose p').firstChild, range = document.createRange()
   range.selectNodeContents(text); getSelection().removeAllRanges(); getSelection().addRange(range)
   view = { ...summary('Third'), outcome: 'Updated outcome' }; changed('session'); await delay(5)
   const refresh = $('#refresh-brief')
-  check(refresh.innerText === 'Update available' && getSelection().toString() === 'Third outcome' && $('main .prose p').firstChild === text, 'Same-session refresh disturbed the reader')
+  check(refresh.hasAttribute('data-pending') && getSelection().toString() === 'Third outcome' && $('main .prose p').firstChild === text, 'Same-session refresh disturbed the reader')
   prefs.pauseWhileReading = false; events.settings({ key: 'pauseWhileReading' }); await delay(5)
   check($('main .prose p').textContent === 'Updated outcome', 'Live mode did not apply the pending update')
   view = { scope: 'excluded', excluded: 'session' }; changed('exclusions')
@@ -180,9 +184,11 @@ async function exercisePanel(defaults) {
   window.frameElement.height = '650'
   view = { ...view, outcome: Array.from({ length: 65 }, (_, i) => `Paragraph ${i + 1}`).join('\n\n') }
   load.click(); await delay(5)
-  $('main details.history summary').click()
   const paragraph = $('main .prose p')
   check(paragraph?.textContent === 'Paragraph 1' && load.hidden && !refresh.hidden, 'Loading did not replace the initial action with Refresh')
+  const beforeReload = reportRequests
+  refresh.click(); await delay(5)
+  check(reportRequests === beforeReload && $('#reload-feedback').textContent && !$('#handoff-dialog').open && !$('.history'), 'Reloading an unchanged single reply opened a writing flow, gave no feedback or displayed an empty history list')
   check(canSave(), 'Loading the session reply did not make Save available')
   check(!$('.manual-welcome') && $('main h1').getBoundingClientRect().top < 60, 'Loaded brief retained the empty layout')
   window.scrollTo(0, 800)
@@ -224,6 +230,9 @@ async function exercisePanel(defaults) {
   check(checkpointSaves === 1 && $('#checkpoint-status').textContent.includes('1 saved'), 'Explicit capture did not confirm the checkpoint')
   $('#close-handoff').click()
   check($('main .prose td')?.textContent === 'Room booked' && $('main').innerText.includes('revision 1') && !$('main header details').open && $('main header details').textContent.includes('Capacity verified'), 'Custom report or compact underlying facts missing')
+  check(create().closest('footer') && !$('#reader-tools #open-handoff'), 'Writing still competes with the reader toolbar')
+  create().click(); await delay(5)
+  check(handoff.open && $('#checkpoint-prompt').textContent.includes('\"revision\":2') && checkpointSaves === 1, 'Revising a saved summary lost its revision or wrote it without consent')
 }
 
 const chrome = [process.env.CHROME_PATH, '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', '/usr/bin/google-chrome', '/usr/bin/chromium', process.env.ProgramFiles && join(process.env.ProgramFiles, 'Google/Chrome/Application/chrome.exe')].find(p => p && existsSync(p))

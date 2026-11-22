@@ -9,15 +9,12 @@
 <body>
   <div id="reader-tools" role="group" aria-label="Brief controls">
     <span id="agent-working" role="status" hidden>Agent working</span>
+    <small id="reload-feedback" role="status"></small>
     <button type="button" id="refresh-brief" aria-describedby="refresh-hint" hidden>
       <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7v5h-5"/><path d="M19.6 11a8 8 0 1 0-2 6.5"/></svg>
-      <span>Refresh</span>
+      <span>Reload view</span>
     </button>
     <span id="refresh-hint" role="tooltip">Reload the saved report or recent replies without starting an agent.</span>
-    <div class="handoff-control" hidden>
-      <button type="button" id="open-handoff" aria-haspopup="dialog" aria-describedby="handoff-hint">Update report…</button>
-      <span id="handoff-hint" role="tooltip">Save a new revision without rereading the whole conversation.</span>
-    </div>
     <button id="open-settings" type="button" aria-label="Settings" title="Settings" aria-haspopup="dialog">
       <img id="panel-icon" src="./assets/session-summary.png" width="24" height="24" alt="" hidden>
       <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 3 1-1h4l1 3 2 1 3-.5 2 3.5-2 2v2l2 2-2 3.5-3-.5-2 1-1 3h-4l-1-3-2-1-3 .5L2 15l2-2v-2L2 9l2-3.5 3 .5 2-1Z"/><circle cx="12" cy="12" r="3"/></svg>
@@ -34,7 +31,7 @@
         <path d="m18 19 7-4m-3 6 7-4" stroke-width="1.6"/>
       </svg>
       <h2>Catch up on this session</h2>
-      <p>Read the saved brief or catch up on recent agent replies.</p>
+      <p>Read the saved summary or the agent’s last reply. Nothing new is written.</p>
     </div>
   </template>
   <div id="brief-content">
@@ -42,17 +39,16 @@
     <button id="manual-load" type="button" hidden>Load brief</button>
   </div>
   <dialog id="handoff-dialog" aria-labelledby="handoff-title" closedby="any">
-    <div class="dialog-heading"><h2 id="handoff-title">Session report</h2><button type="button" id="close-handoff" autofocus>Close</button></div>
+    <div class="dialog-heading"><h2 id="handoff-title">Save a session summary</h2><button type="button" id="close-handoff" autofocus>Close</button></div>
     <p id="checkpoint-target" class="muted"></p>
-    <section><h3>1. Ask your current agent</h3>
-      <p>Paste the instructions into a regular turn. Writing a checkpoint uses that agent’s normal tokens. Copying does not send anything.</p>
-      <details><summary>Read the instructions</summary><pre id="checkpoint-prompt"></pre></details>
-      <button type="button" id="copy-checkpoint">Copy instructions</button>
+    <section><h3>1. Ask the agent in this conversation</h3>
+      <p>Copy the request and paste it into your conversation. Copying sends nothing. Writing the summary uses your agent’s normal tokens.</p>
+      <details><summary>Read the request</summary><pre id="checkpoint-prompt"></pre></details>
+      <button type="button" id="copy-checkpoint">Copy request</button>
     </section>
-    <section><h3>2. Save the completed checkpoint</h3>
-      <p>Save after the agent finishes, before its next reply. Only the marked handoff is kept on this desktop. Saving makes no model request.</p>
-      <p>Already have JSON from a separate recap? Use it below instead.</p>
-      <button type="button" id="save-checkpoint" disabled>Save checkpoint</button>
+    <section><h3>2. Save the agent’s answer</h3>
+      <p>When the agent finishes, return here before its next reply. Saving keeps the summary on this desktop without starting another turn.</p>
+      <button type="button" id="save-checkpoint" disabled>Save summary</button>
     </section>
     <details><summary>Use a model-written draft</summary>
       <label>Paste the report JSON from your recap session<textarea id="report-draft" rows="5" maxlength="16384"></textarea></label>
@@ -74,7 +70,7 @@
       <label class="option"><span>Read recent agent replies<small>Show the latest update and recent work when there’s no saved session report.</small></span><input name="historyOutcome" type="checkbox"></label>
       <label class="option"><span>Read paired session history<small>Read the selected conversation from its own Orca server. Turn off for saved remote reports only.</small></span><input name="pairedHistory" type="checkbox"></label>
       <label class="option"><span>Show the plugin icon</span><input name="showPanelIcon" type="checkbox"></label>
-      <label class="option"><span>Pause updates while reading<small>Choose Refresh when you’re ready. Turn off to always show the latest brief.</small></span><input name="pauseWhileReading" type="checkbox"></label>
+      <label class="option"><span>Pause updates while reading<small>Choose Show update when you’re ready. Turn off to always show the latest brief.</small></span><input name="pauseWhileReading" type="checkbox"></label>
       <label class="option"><span>Open for new worktrees<small>Only when the new worktree has a saved summary.</small></span><input name="autoOpen" type="checkbox"></label>
     </fieldset>
     </details>
@@ -117,7 +113,7 @@
     </details>
     <details name="settings-section" id="summary-guide">
       <summary>How to get your first summary</summary>
-      <p>Select an agent tab and open Threadbrief. Choose Create report for a goal, result, confirmation and next step, or expand Recent messages to read the agent’s words. No profile or API key needed.</p>
+      <p>Open an agent tab to read its last reply or saved summary. Reload view checks for changes. For a summary you can keep, choose Save a summary below the reply.</p>
       <p>Want a shorter reply? Send this to your agent:</p>
       <blockquote id="recap-prompt">Sum up this task in my language. Use three short lines: Goal, Done, Next. Mention anything still unresolved. If nothing remains, say so.</blockquote>
       <button id="copy-prompt" type="button">Copy prompt</button>

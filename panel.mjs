@@ -116,37 +116,32 @@ function drawSummary(view, workflow) {
   }
   const header = node('header', undefined, main)
   if (view.title) node('h1', view.title, header)
-  if (view.scope === 'session' && !view.summary) {
-    const empty = node('section', undefined, main)
-    node('h2', 'No report yet', empty)
-    node('p', 'Keep the goal, result, confirmation and next step together as this session progresses.', empty, 'muted')
-    if (!['historyOff', 'pairedOff', 'unavailable'].includes(view.emptyReason)) {
-      const create = button(empty, 'Create report…', openHandoff)
-      create.id = 'create-report'
-      if (view.working) node('small', 'Available when the agent finishes this turn.', empty)
+  if (view.scope === 'session' && !view.summary && view.outcome) {
+    const latest = node('section', undefined, main, 'latest-reply')
+    node('h2', 'Last agent reply', latest)
+    renderMarkdown(node('div', undefined, latest), view.outcome, openProseLink)
+    if (view.earlierReplies?.length) {
+      const earlier = node('details', undefined, main, 'history')
+      node('summary', `Earlier replies (${view.earlierReplies.length})`, earlier)
+      for (const reply of view.earlierReplies) renderMarkdown(node('div', undefined, earlier), reply, openProseLink)
     }
-    if (view.outcome) {
-      const evidence = node('details', undefined, main, 'history')
-      node('summary', `Recent messages (${1 + (view.earlierReplies?.length ?? 0)})`, evidence)
-      for (const reply of [view.outcome, ...(view.earlierReplies ?? [])]) renderMarkdown(node('div', undefined, evidence), reply, openProseLink)
-      return
-    }
+    return
   }
   const summary = view.summary
   if (!summary) {
     const hints = {
-      waiting: view.manual ? 'No completed reply yet. Refresh after this turn finishes.' : 'No completed reply yet. The first one will appear here when this turn finishes.',
+      waiting: view.manual ? 'Waiting for the first reply. Reload the view after the agent finishes.' : 'Waiting for the first reply. It will appear here when the agent finishes.',
       historyOff: 'No saved session report. Turn on “Read recent agent replies” to read this session’s history.',
       pairedOff: 'Paired history is off. Enable it in Settings or save a session report.',
-      unavailable: 'Orca could not read this session’s history. Check the connection, then choose Refresh.',
-      noReply: 'No finished reply was available when this brief loaded. Choose Refresh to check again.'
+      unavailable: 'Orca could not read this session’s history. Check the connection, then reload the view.',
+      noReply: 'No completed reply to show yet. Reload the view after the agent replies.'
     }
     node('p', hints[view.emptyReason] || 'Select an agent tab in Orca to see its summary.', main, 'empty-hint')
     button(main, 'How summaries work', () => openSettings(true)).className = 'guide-link'
     return
   }
   const cp = summary.checkpoint
-  node('p', cp ? `Session report · revision ${cp.revision}` : view.scope === 'worktree' ? 'Shared with this worktree' : 'Saved for this session', header, 'muted')
+  node('p', cp ? `Saved summary · revision ${cp.revision}` : view.scope === 'worktree' ? 'Shared with this worktree' : 'Saved for this session', header, 'muted')
   let facts = header
   if (cp?.formatted) {
     renderMarkdown(node('div', undefined, header), cp.formatted, openProseLink)
@@ -200,6 +195,20 @@ function drawSummary(view, workflow) {
     node('h2', 'Links', footer)
     links(footer, summary.links)
   }
+}
+function drawSummaryAction(view) {
+  if (view.scope !== 'session' || (view.summary && !view.summary.checkpoint) || ['waiting', 'historyOff', 'pairedOff', 'unavailable'].includes(view.emptyReason)) return
+  const revision = view.summary?.checkpoint?.revision ?? 0
+  const footer = node('footer', undefined, main, 'summary-action')
+  const control = button(footer, revision ? 'Revise saved summary…' : 'Save a summary…', openHandoff)
+  control.id = 'open-handoff'
+  control.dataset.revision = String(revision)
+  control.setAttribute('aria-haspopup', 'dialog')
+  control.setAttribute('aria-describedby', 'handoff-purpose')
+  const hint = revision
+    ? 'Ask your agent for a new version. This one stays here until you save its replacement.'
+    : 'Ask your agent to record the goal, decisions and next steps. The summary stays here as the conversation continues.'
+  node('small', hint, footer).id = 'handoff-purpose'
 }
 function drawWorkflow(workflow, draftKey) {
   if (!workflow || workflow.state === 'none') return
@@ -273,9 +282,11 @@ let handoffTarget
 function setHandoffTarget(view) {
   const revision = view?.summary ? view.summary.checkpoint?.revision : 0
   handoffTarget = view?.reportSessionKey && !view.working && revision !== undefined ? {sessionKey:view.reportSessionKey, revision} : null
-  const create = document.getElementById('create-report')
-  if (create) create.disabled = handoffTarget?.revision !== 0
-  handoffButton.disabled = !handoffTarget?.revision
+  const control = document.getElementById('open-handoff')
+  if (control) {
+    control.disabled = handoffTarget?.revision !== Number(control.dataset.revision)
+    control.title = view?.working ? 'Available when the agent finishes this turn.' : ''
+  }
 }
 function showLoading(leaving = false) {
   setHandoffTarget(null)
@@ -287,10 +298,11 @@ function showLoading(leaving = false) {
     main.setAttribute('aria-busy', 'true')
     status.textContent = ''
   }
-  if (leaving) handoffControl.hidden = true
+  reloadFeedback.textContent = ''
   if (leaving) main.inert = true
 }
 const activity = document.querySelector('#agent-working'), refreshBrief = document.querySelector('#refresh-brief')
+const reloadFeedback = document.querySelector('#reload-feedback')
 const manualLoad = document.querySelector('#manual-load')
 let manualKey
 manualLoad.addEventListener('click', () => { if (manualKey) void refresh(false, true, manualKey) })
@@ -304,7 +316,7 @@ const holdUpdate = () => pauseWhileReading && hasBrief && (reading() || refreshB
 function pendingUpdate(pending) {
   if (refreshBrief.hasAttribute('data-pending') === pending) return
   refreshBrief.toggleAttribute('data-pending', pending)
-  refreshBrief.querySelector('span').textContent = pending ? 'Update available' : 'Refresh'
+  refreshBrief.querySelector('span').textContent = pending ? 'Show update' : 'Reload view'
 }
 function resetReader() {
   manualKey = undefined
@@ -312,12 +324,14 @@ function resetReader() {
   displayedContext = undefined
   hasBrief = pointerReading = false
   activity.hidden = refreshBrief.hidden = true
-  handoffControl.hidden = true
   pendingUpdate(false)
 }
 refreshBrief.addEventListener('click', async () => {
   refreshBrief.disabled = true
-  try { await refresh(false, true, manualKey) }
+  try {
+    const message = await refresh(false, true, manualKey)
+    if (message) reloadFeedback.textContent = message
+  }
   finally { refreshBrief.disabled = false }
 })
 async function refresh(leaving = false, apply = true, loadFor) {
@@ -345,7 +359,6 @@ async function refresh(leaving = false, apply = true, loadFor) {
     const welcome = view.scope === 'manual'
     manualLoad.hidden = !welcome || !manualKey
     refreshBrief.hidden = welcome || view.scope === 'excluded' || (view.scope === 'none' && !manualKey)
-    handoffControl.hidden = view.scope !== 'session' || !view.summary?.checkpoint
     activity.hidden = !working || view.manual
     sourceHint = working ? 'Choose an agent now. Preview is available when this turn finishes.' :
       view.scope === 'excluded' ? 'Summaries are off for this selection.' :
@@ -353,7 +366,11 @@ async function refresh(leaving = false, apply = true, loadFor) {
       view.scope === 'none' ? 'Select a finished agent conversation to preview a recap.' : ''
     updatePreviewControl()
     const key = JSON.stringify([view, !view.summary && working, workflow, workflowResult.error?.message, original?.key && dirtyDrafts.has(original.key)])
-    if (key === rendered && contextKey === displayedContext) { confirmed = result; pendingUpdate(false); return }
+    if (key === rendered && contextKey === displayedContext) {
+      confirmed = result
+      pendingUpdate(false)
+      return view.emptyReason === 'unavailable' ? undefined : 'No changes'
+    }
     if (!apply && !leaving && displayedContext === contextKey && view.scope !== 'excluded' && holdUpdate()) {
       pendingUpdate(true)
       return
@@ -366,18 +383,19 @@ async function refresh(leaving = false, apply = true, loadFor) {
     const openKey = editor?.open ? editor.dataset.draftKey : null
     rendered = key
     main.replaceChildren()
-    drawSummary({ ...view, working }, workflow)
+    drawSummary(view, workflow)
+    drawSummaryAction(view)
     if (keepEvidenceOpen && main.querySelector('details.history')) main.querySelector('details.history').open = true
     drawWorkflow(workflow, original?.key)
     if (workflowResult.error) node('p', message(workflowResult.error, 'Could not load workflow actions.'), main)
     const nextEditor = main.querySelector('details[data-draft-key]')
     if (nextEditor?.dataset.draftKey === openKey) nextEditor.open = true
     confirmed = result
+    return view.emptyReason === 'unavailable' ? undefined : 'Reloaded'
   } catch (error) {
     if (ticket !== generation || document.hidden) return
     if (!leaving && !apply && holdUpdate()) { pendingUpdate(true); return }
     rendered = undefined
-    handoffControl.hidden = true
     main.replaceChildren()
     node('p', message(error, 'Could not load summary.'), main)
   } finally {
@@ -507,7 +525,7 @@ async function loadPreferences() {
       group.disabled = false
     }
     for (const key of ['autoOpen', 'pauseWhileReading']) dialog.querySelector(`[name="${key}"]`).disabled = values.manualLoad === true
-    document.querySelector('#load-mode-hint').textContent = values.manualLoad ? 'On: use Load brief or Refresh brief in the panel.' : 'Off: the brief follows your selected session.'
+    document.querySelector('#load-mode-hint').textContent = values.manualLoad ? 'On: use Load brief to start reading, then Reload view to check for changes.' : 'Off: the brief follows your selected session.'
     await showStrategy(values, revision)
     document.querySelector('#command-order').hidden = values.profileActions !== true
   } catch (error) {
@@ -705,7 +723,7 @@ startRecap.addEventListener('click', async () => {
   try {
     const { focused } = await request('recap.start', { token })
     if (focused && dialog.open) dialog.close()
-    else recapStatus.textContent = 'Recap session started. To keep its draft, copy the JSON and return to the source session → Create or Update report → Use a model-written draft.'
+    else recapStatus.textContent = 'Recap session started. To keep its draft, copy the JSON, return to the source session and open the summary action below the text. Choose Use a model-written draft.'
   } catch (error) { recapStatus.textContent = message(error, 'Check Orca for a new agent session before trying again.') }
   finally { startRecap.disabled = recapPending = false; updatePreviewControl() }
 })
@@ -778,31 +796,21 @@ function openSettings(showGuide = false) {
 document.querySelector('#open-settings').addEventListener('click', () => openSettings())
 const handoff = document.querySelector('#handoff-dialog'), checkpointStatus = document.querySelector('#checkpoint-status')
 const saveCheckpoint = document.querySelector('#save-checkpoint'), checkpointTarget = document.querySelector('#checkpoint-target')
-const handoffControl = document.querySelector('.handoff-control')
-const handoffButton = document.querySelector('#open-handoff')
-let activeHint
-for (const control of [refreshBrief, handoffButton]) {
-  const hint = document.getElementById(control.getAttribute('aria-describedby'))
-  const show = () => {
-    if (activeHint) activeHint.hidden = true
-    activeHint = hint
-    hint.hidden = false
-  }
-  control.addEventListener('pointerenter', show)
-  control.addEventListener('focus', show)
-  control.addEventListener('click', () => { hint.hidden = true })
-}
-document.addEventListener('keydown', event => { if (event.key === 'Escape' && activeHint) activeHint.hidden = true })
+const refreshHint = document.querySelector('#refresh-hint')
+const resetRefreshHint = () => { refreshHint.hidden = false }
+refreshBrief.addEventListener('pointerenter', resetRefreshHint)
+refreshBrief.addEventListener('focus', resetRefreshHint)
+refreshBrief.addEventListener('click', () => { refreshHint.hidden = true })
+document.addEventListener('keydown', event => { if (event.key === 'Escape') refreshHint.hidden = true })
 let handoffVisit = 0, checkpointKey
 handoff.addEventListener('close', () => { ++handoffVisit; checkpointKey = undefined })
 document.querySelector('#close-handoff').addEventListener('click', () => handoff.close())
 const draftInput = document.querySelector('#report-draft'), importDraft = document.querySelector('#import-draft')
 function draftReady() { importDraft.disabled = !checkpointKey || !draftInput.value.trim() }
 draftInput.addEventListener('input', draftReady)
-handoffButton.addEventListener('click', openHandoff)
 async function openHandoff(event) {
   const expected = handoffTarget, control = event.currentTarget
-  if (!expected || (control === handoffButton) !== (expected.revision > 0) || handoff.open) return
+  if (!expected || Number(control.dataset.revision) !== expected.revision || handoff.open) return
   const visit = ++handoffVisit
   control.disabled = true
   checkpointKey = undefined
@@ -820,6 +828,7 @@ async function openHandoff(event) {
       await refresh(target.stale === 'session', true, target.stale === 'report' ? manualKey : undefined)
       return
     }
+    document.querySelector('#handoff-title').textContent = target.revision ? 'Revise saved summary' : 'Save a session summary'
     handoff.showModal()
     checkpointKey = target.key
     checkpointTarget.textContent = `${target.title} · ${target.environment === 'local' ? 'This desktop' : 'Paired server'}`

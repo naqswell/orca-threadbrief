@@ -7,6 +7,11 @@ h2 { font-size: 16px }
 h3 { font-size: 14px }
 p + p, dl, nav, .row, fieldset, .step, #project-preview:not(:empty) { margin-top: 10px }
 dt, figcaption { font-weight: 600; color: var(--orca-muted-foreground, #555) }
+.latest-reply > h2 { margin-bottom: 8px; font-size: 13px; color: var(--orca-muted-foreground, #555) }
+.summary-action { display: grid; justify-items: start; gap: 5px }
+.summary-action small { max-width: 48ch }
+#reload-feedback { font-size: 12px; margin-inline-end: 3px }
+#reload-feedback:empty { display: none }
 .history { margin-top: 16px; border-top: 1px solid var(--edge) }
 .history > summary { padding-block: 10px; color: var(--orca-muted-foreground, #666); font-weight: 600 }
 main section > button { margin-top: 8px }

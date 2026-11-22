@@ -6,15 +6,15 @@ If you want to know where you left off, you only need the plugin and a local age
 
 1. [Install the plugin](../README.md#install). Open a local agent conversation in Orca, or select one where the agent has already finished a task.
 2. For a quick trial, ask: **“I have six guests and eight chairs. How many chairs will be spare? Answer in one sentence.”** Wait for the answer. Leave the conversation tab selected; you don't have to close it.
-3. Open **Threadbrief**. With no saved report you’ll see **No report yet**. Expand **Recent messages** to see the answer about the two spare chairs. Choose **Create report…** to turn a milestone into a persistent handoff, or simply leave it as a conversation.
+3. Open **Threadbrief**. With no saved summary, **Last agent reply** shows the answer about the two spare chairs. You don’t have to create anything. If there are earlier replies, expand **Earlier replies** to read those too.
 
-Recent messages are quotes, not a whole-session summary. Threadbrief shows up to three distinct replies from the last 48 history entries, newest first, up to 1,600 characters each. Tool calls and short acknowledgements are skipped. Reading them does not start another model.
+These are quotes, not a whole-session summary. Threadbrief shows up to three distinct replies from the last 48 history entries, newest first, up to 1,600 characters each. Tool calls and short acknowledgements are skipped. Reading the replies does not start another model.
 
 No formatting prompt is required. Plain text keeps its line breaks. Markdown replies display headings, lists, tables, emphasis and code; command examples are selectable text, not actions. Web links open through Orca when you click them. File links keep their label and show the path on hover. HTML is displayed as text and remote images are not loaded.
 
 ### Load a brief only when you need it
 
-Turn on **Load briefs only on click** in the gear menu or Orca’s settings for Threadbrief. Select a session and click **Load brief**. When you leave and come back, Threadbrief restores what you last read, even if the agent has since replied. Hover over **Refresh** or focus it with Tab to see what it reloads. Clicking it reads existing material; it does not ask an agent to write a new report. Expand a before/after pair to load its images.
+Turn on **Load briefs only on click** in the gear menu or Orca’s settings for Threadbrief. Select a session and click **Load brief**. When you leave and come back, Threadbrief restores what you last read, even if the agent has since replied. **Reload view** in the top bar checks for a newer saved summary or reply. It doesn’t create a summary. Expand a before/after pair to load its images.
 
 The worker remembers the last 12 manually loaded sessions in memory, separately for each workspace and source host. Returning does not reread reports or conversation history. Restarting the worker, changing the history or load settings, or editing exclusions clears the remembered briefs. New worktrees do not auto-open in this mode. [Set this preference from an agent](configuration.md).
 
@@ -26,8 +26,8 @@ These buttons display existing material, including on a paired server. To ask a 
 
 Use a checkpoint when one task spans many turns. Instead of asking another agent to reread a chat excerpt, ask the agent already doing the work to leave a handoff at a milestone.
 
-1. Load the session. Choose **Create report…** (or **Update report…** for a saved checkpoint), then **Copy instructions**. Paste them into your next regular message in the **original** conversation. They include the previous facts, next revision and your format preference, not the whole transcript. Copying sends nothing. That turn uses the agent’s normal tokens.
-2. Once the agent finishes, choose **Save checkpoint** before its next reply. Threadbrief verifies the host and session and checks the end of the latest finished reply. Only the marked report is saved on this desktop. The panel shows **Session report · revision N**.
+1. Choose **Save a summary…** below the reply, or **Revise saved summary…** below an existing summary. Choose **Copy request** and paste it into your next regular message in the **original** conversation. The request includes the previous facts, next revision and your format preference, not the whole transcript. Copying sends nothing; the turn you send uses your agent’s normal tokens.
+2. Once the agent finishes, choose **Save summary** in the same dialog before its next reply. Threadbrief verifies the host and session and checks the end of the latest finished reply. Only the marked summary is saved on this desktop. The panel shows **Saved summary · revision N**.
 3. At each milestone, repeat with the latest instructions. The new report replaces the previous one, carrying forward decisions and evidence that still apply. Nothing runs between saves. If you started late or cleared the chat, state what is unknown rather than claiming full coverage.
 
 For agents: finish the reply with this fenced JSON block. Use the conversation’s language, one line of text per field (up to 480 characters). Start at revision 1 and increase it on each update. Use “None” for an empty field; do not invent missing history.
@@ -38,7 +38,7 @@ For agents: finish the reply with this fenced JSON block. Use the conversation�
 ```
 ````
 
-Only the latest saved version is kept per server and session, on the desktop showing the panel. A duplicate changes nothing. An older, conflicting or malformed checkpoint cannot replace it. A report written with the CLI takes precedence and is never replaced by **Save checkpoint**. If you start midway through a long session, earlier facts the agent no longer sees cannot be recovered from this feature. With paired history off or the server disconnected, Threadbrief cannot capture a new checkpoint.
+Only the latest saved version is kept per server and session, on the desktop showing the panel. A duplicate changes nothing. An older, conflicting or malformed checkpoint cannot replace it. A report written with the CLI takes precedence and cannot be replaced from the panel. If you start midway through a long session, earlier facts the agent no longer sees cannot be recovered from this feature. With paired history off or the server disconnected, Threadbrief cannot capture a new checkpoint.
 
 ## Choose a strategy and an agent
 
@@ -50,7 +50,7 @@ Only the latest saved version is kept per server and session, on the desktop sho
 
 In **Settings → Recap strategy and model**, choose the agent. After the source turn finishes, click **Choose messages…**. Nothing is preselected. If the saved checkpoint is still visible, only later messages are offered. Otherwise there may be a gap: hand-pick the changes you recognize. Orca does not provide a reliable cursor through the entire session. With no eligible messages, there is nothing to send.
 
-Choose **Preview recap request**. It shows the destination, previous compact facts, formatting instructions, and the exact selected text. Tool calls are excluded, but ordinary messages can contain private data. Only **Start recap in new session** sends the request to the selected agent. To keep its answer, copy the JSON, return to the **original** session, and use **Create report…** or **Update report… → Use a model-written draft**. Saving a draft for a different session or an obsolete revision is refused. A manually written CLI report stays under its writer’s control.
+Choose **Preview recap request** to see the destination, previous compact facts, formatting instructions and exact selected text. Tool calls are excluded, but ordinary messages can contain private data. Only **Start recap in new session** sends this request. To keep its answer, copy the JSON, return to the **original** session, and open **Save a summary…** (or **Revise saved summary…**). Choose **Use a model-written draft**. A draft for a different session or an obsolete revision is refused. A manually written CLI report stays under its writer’s control.
 
 **Choose a model:** keep **Use agent’s default** or pick a named model under **Reported by**. If the list is empty, [ask the agent to register its models](configuration.md#let-an-agent-fill-the-model-picker). **Add a model…** still lets you pin an exact identifier yourself. Check the model and host in the preview. To unpin, choose **Use agent’s default**. In Orca’s plugin settings the same selection is **Preferred recap agent** and **Custom recap model (optional)**. Threadbrief does not retry a rejected launch with a different model.
 
@@ -83,8 +83,8 @@ The panel shows the first available source, not a blend of conversations:
 | Label in the panel | Whose work it describes |
 | --- | --- |
 | **Saved for this session** | A report explicitly written for this Orca session. It wins even if there is a newer reply. |
-| **Session report · revision N** | A checkpoint or explicitly imported draft saved for this session. A new reply does not overwrite it. |
-| **Recent messages** (under **No report yet**) | Quotes from this session, not the report. If the transcript has no usable text, Threadbrief can show the last reply Orca reports for the same finished session. |
+| **Saved summary · revision N** | A checkpoint or explicitly imported draft saved for this session. A new reply does not overwrite it. |
+| **Last agent reply** / **Earlier replies** | Quotes from this session, shown when no saved report exists. If the transcript has no usable text, Threadbrief can show the last reply Orca reports for the same finished session. |
 | **Shared with this worktree** | A saved report for the checkout. It can include other sessions' work; it isn't attributed to the selected agent. |
 
 Turning off **Read recent agent replies** disables history, including manual recap previews. It doesn't delete anything. No history is sent to an agent unless you confirm the preview.
@@ -132,9 +132,9 @@ Skip this if history is enough. Use a saved report for a stable handoff or when 
 | The panel asks you to select an agent tab | Select the conversation itself, not a file, empty shell, or browser tab. In a split terminal, select the pane with the agent. |
 | **Loading summary…** | The panel is fetching its first brief. After that, switching sessions keeps the previous brief visible until the next one is ready, with no loading animation. |
 | **Agent working** | You can keep reading this session’s last completed reply or saved report. The unfinished turn is not a summary. If there is no previous result, the panel waits for the first one. |
-| **Update available** | You were reading when the same session changed. Click **Update available** in the top bar to read the new version. Switching sessions follows the new selection; turning off history or excluding it clears the old view immediately. |
-| You prefer a live view even while reading | Turn off **Pause updates while reading** in the gear under **Panel**, or in Orca’s plugin settings. Any pending result appears immediately; future updates no longer wait for **Refresh**. This does not start a model. |
-| The agent finished, but there is no history reply | Check **Read recent agent replies**, then choose **Refresh**. If Orca has no readable history for this session, use a saved report. |
+| **Show update** | The session changed while you were reading. Choose **Show update** in the top bar when you’re ready. Switching sessions follows the new selection; turning off history or excluding it clears the old view immediately. |
+| You prefer a live view even while reading | Turn off **Pause updates while reading** under **Sources and reading** or in Orca’s plugin settings. Any pending result appears immediately; future updates no longer wait for a click. This does not start a model. |
+| The agent finished, but there is no history reply | Check **Read recent agent replies**, then choose **Reload view**. If Orca has no readable history for this session, use a saved report. |
 | A paired session has no reply | Check the paired connection, both history preferences and whether the agent finished. If the server does not expose that transcript, use a saved report. |
 | The panel shows a shared report or an older saved report | Check the source label above. A shared report belongs to the checkout. To change a saved session report, write it again for the same session ID. |
 

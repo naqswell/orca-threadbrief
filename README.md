@@ -1,8 +1,8 @@
 # Threadbrief for Orca
 
-Threadbrief keeps one report per Orca session. Open the sidebar to see the goal, result, confirmation and next step. If nobody has written a report yet, **Recent messages** lets you inspect the agent’s replies without mistaking them for a handoff.
+Open Threadbrief in the Orca sidebar to read the **last agent reply** for the selected session. If you’ve saved a summary, you’ll see that instead. **Reload view** checks for changes; it doesn’t ask an agent to write anything.
 
-Choose **Create report… → Copy instructions** and paste them into your next message in the same conversation. **Save checkpoint** keeps the reply on your desktop. At the next milestone, **Update report…** gives the agent the previous facts, not a replay of the chat. Writing uses that agent’s usual tokens; opening or refreshing the sidebar does not start a model. [How checkpoints work](docs/getting-started.md#keep-a-running-handoff-in-the-same-session).
+Want the goal, decisions and next steps in one place? Choose **Save a summary…** below the reply, then **Copy request**. Paste the request into the same conversation. When the agent answers, choose **Save summary** to keep it on this desktop. At the next milestone, **Revise saved summary…** gives the agent the previous facts instead of the whole chat. Only the turn you send uses the agent’s tokens. [How checkpoints work](docs/getting-started.md#keep-a-running-handoff-in-the-same-session).
 
 <picture>
   <source media="(prefers-reduced-motion: reduce)" srcset="assets/threadbrief-demo.png">
@@ -39,7 +39,7 @@ Click the gear at the top of the panel. **Brief recap** (default) asks for up to
 
 **Your layout:** under **Settings → Report format**, describe the language and structure you want, for example “In Spanish, give me a decision table and finish with unanswered questions.” The next report uses that layout; its short factual record remains available underneath. With a separate recap agent, select individual messages before previewing. Nothing is selected or sent automatically.
 
-Prefer to load a brief yourself? Turn on **Load briefs only on click**. Click **Load brief** once, switch sessions, and return to the version you read. Use **Refresh** in the top bar to reread the report or latest reply.
+Prefer to load a brief yourself? Turn on **Load briefs only on click**. Click **Load brief** once. When you return to that session, you’ll see the version you last read. Use **Reload view** in the top bar when you want to check for changes.
 
 **Configuring Threadbrief from an agent or terminal?** [Set preferences, choose a model, manage exclusions and profiles with JSON](docs/configuration.md). No developer mode or GUI automation required.
 
