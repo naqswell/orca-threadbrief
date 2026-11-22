@@ -287,6 +287,11 @@ async function refresh(leaving = false, apply = true) {
     if (ticket !== generation || document.hidden) return
     const { working, contextKey, ...view } = result
     activity.hidden = !working
+    sourceHint = working ? 'Choose an agent now. Preview is available when this turn finishes.' :
+      view.scope === 'excluded' ? 'Summaries are off for this selection.' :
+      view.emptyReason === 'pairedOff' ? 'Turn on paired session history to preview a recap.' :
+      view.scope === 'none' ? 'Select a finished agent conversation to preview a recap.' : ''
+    updatePreviewControl()
     const key = JSON.stringify([view, workflow, workflowResult.error?.message, original?.key && dirtyDrafts.has(original.key)])
     if (key === rendered && contextKey === displayedContext) { refreshBrief.hidden = true; return }
     if (!apply && !leaving && displayedContext === contextKey && view.scope !== 'excluded' && holdUpdate()) {
@@ -345,7 +350,7 @@ api.plugin.on('summary.changed', ({ reason } = {}) => {
   if (privateChange) { main.replaceChildren(); main.hidden = true; rendered = undefined }
   if (leaving || reason === 'session' || reason === 'settings') clearRecap()
   void refresh(leaving, false)
-  if (dialog.open && (leaving || reason === 'session')) void loadPreferences()
+  if (dialog.open && leaving) void loadPreferences()
   if (dialog.open && exclusionsPanel.open && (leaving || reason === 'session')) void loadExclusions()
 })
 document.addEventListener('visibilitychange', () => { if (document.hidden) pause(); else void refresh() })
@@ -429,7 +434,7 @@ async function loadPreferences() {
     for (const group of preferenceGroups) {
       for (const field of group.elements) {
         if (field.type === 'checkbox') field.checked = values[field.name] === true
-        else field.value = values[field.name]
+        else field.value = values[field.name] ?? (field.name === 'summaryStrategy' ? 'brief' : '')
       }
       group.disabled = false
     }
@@ -442,6 +447,20 @@ async function loadPreferences() {
 const recapAgent = document.querySelector('#recap-agent'), recapStatus = document.querySelector('#recap-status')
 const previewRecap = document.querySelector('#preview-recap'), startRecap = document.querySelector('#start-recap')
 let recapRevision = 0, recapToken, previousMode
+const agentHint = document.querySelector('#agent-hint')
+const modelInput = document.querySelector('#recap-model'), modelForm = document.querySelector('#recap-model-form')
+const saveModel = modelForm.querySelector('button')
+const modelChoice = document.querySelector('#model-choice'), addModel = ' add '
+const historyKey = agent => `recap-models-${agent}`
+let savingChoice = false
+let sourceHint = '', listHint = '', historyEnabled = true, recapPending = false
+function updatePreviewControl() {
+  agentHint.textContent = listHint || (!historyEnabled ? 'Turn on session history to preview a recap.' : sourceHint)
+  const editing = !modelForm.hidden
+  saveModel.disabled = !modelInput.value.trim() || savingChoice
+  modelChoice.disabled = savingChoice || recapAgent.disabled || !recapAgent.value
+  previewRecap.disabled = editing || savingChoice || recapPending || recapAgent.disabled || !recapAgent.value || Boolean(agentHint.textContent)
+}
 function clearRecap() {
   ++recapRevision
   recapToken = undefined
@@ -449,58 +468,112 @@ function clearRecap() {
   document.querySelector('#recap-text').textContent = recapStatus.textContent = ''
 }
 async function showStrategy(values, revision) {
-  const mode = values.summaryStrategy ?? 'instant'
+  const mode = values.summaryStrategy ?? 'brief'
   if (mode !== previousMode) { clearRecap(); previousMode = mode }
   const instant = mode === 'instant'
   document.querySelector('#strategy-hint').textContent = instant ? 'Shows existing text. No extra tokens or agent session.' :
     `${mode === 'brief' ? 'Up to 12 recent entries and 3,000 characters; asks for a 90-word recap.' : 'Up to 48 recent entries and 12,000 characters; asks for a 400-word handoff.'} Your agent’s usual usage limits and pricing apply.`
   document.querySelector('#recap-controls').hidden = instant
   if (instant || !dialog.open) return
-  previewRecap.disabled = true
-  if (values.historyOutcome === false) { clearRecap(); recapStatus.textContent = 'Turn on session history above to preview a recap.'; return }
+  const storedModel = (values.recapModel ?? '').trim()
+  historyEnabled = values.historyOutcome !== false
+  recapAgent.disabled = true
+  modelForm.hidden = true
+  recapAgent.replaceChildren(new Option('Loading agents…', ''))
+  listHint = ''
+  updatePreviewControl()
   let agents
   try { agents = await request('recap.agents') }
   catch (error) {
-    if (revision === settingsRevision) { clearRecap(); recapAgent.replaceChildren(); recapStatus.textContent = message(error, 'No recap target available.') }
+    if (revision === settingsRevision && dialog.open) {
+      clearRecap()
+      recapAgent.replaceChildren(new Option('Agents unavailable', ''))
+      listHint = message(error, 'Could not list agents for this workspace.')
+      updatePreviewControl()
+    }
     return
   }
   if (revision !== settingsRevision || !dialog.open) return
   const chosen = values.recapAgent
+  const available = agents.some(a => a.id === chosen)
   recapAgent.replaceChildren(...agents.map(a => new Option(a.name, a.id)))
-  recapAgent.value = chosen ? agents.find(a => a.id === chosen)?.id ?? '' : agents.find(a => a.preferred)?.id ?? agents[0]?.id ?? ''
-  previewRecap.disabled = !recapAgent.value
-  recapStatus.textContent = !agents.length ? 'No installed agents on this host.' : !recapAgent.value ? 'Your preferred agent is not installed on this host. Choose another agent.' : ''
+  if (!agents.length || (chosen && !available)) recapAgent.prepend(new Option(agents.length ? 'Choose an installed agent…' : 'No agents installed', ''))
+  recapAgent.value = chosen ? available ? chosen : '' : agents.find(a => a.preferred)?.id ?? agents[0]?.id ?? ''
+  recapAgent.disabled = !agents.length
+  listHint = !agents.length ? 'Enable an agent in Orca Settings → Agents on this host.' : !recapAgent.value ? 'Your preferred agent is unavailable in this workspace.' : ''
+  const agent = recapAgent.value
+  const saved = agent ? await api.storage.get(historyKey(agent)).catch(() => null) : null
+  if (revision !== settingsRevision || !dialog.open) return
+  const choices = new Set([storedModel, ...(Array.isArray(saved) ? saved : [])].filter(m => typeof m === 'string' && m))
+  modelChoice.replaceChildren(new Option('Use agent’s default', ''), ...Array.from(choices, m => new Option(m, m)), new Option('Add a model…', addModel))
+  modelChoice.value = storedModel
+  modelForm.hidden = true
+  document.querySelector('#model-help').textContent = `Copy the exact identifier from ${recapAgent.selectedOptions[0]?.textContent || 'the agent'}’s model picker or settings. Threadbrief remembers it here.`
+  updatePreviewControl()
 }
 dialog.addEventListener('close', clearRecap)
-recapAgent.addEventListener('change', () => {
+modelInput.addEventListener('input', updatePreviewControl)
+async function saveChoice(agent, model) {
+  if (savingChoice) return
   clearRecap()
-  void api.settings.set('recapAgent', recapAgent.value).catch(error => { recapStatus.textContent = message(error, 'Could not save agent choice.') })
+  savingChoice = recapAgent.disabled = true
+  updatePreviewControl()
+  try {
+    if (!agent) throw Error('Choose an installed Orca agent first.')
+    if (model) {
+      const key = historyKey(agent), saved = await api.storage.get(key)
+      await api.storage.set(key, [model, ...(Array.isArray(saved) ? saved.filter(m => m !== model) : [])].slice(0, 16))
+    }
+    if (agent !== await api.settings.get('recapAgent')) {
+      await api.settings.set('recapModel', '')
+      await api.settings.set('recapAgent', agent)
+    }
+    await api.settings.set('recapModel', model)
+  } catch (error) { recapStatus.textContent = message(error, 'Could not save your selection.') }
+  finally { savingChoice = false; await loadPreferences() }
+}
+modelChoice.addEventListener('change', () => {
+  clearRecap()
+  modelForm.hidden = modelChoice.value !== addModel
+  if (modelForm.hidden) { void saveChoice(recapAgent.value, modelChoice.value); return }
+  modelInput.value = ''
+  modelInput.focus()
+  updatePreviewControl()
 })
+modelForm.addEventListener('submit', event => {
+  event.preventDefault()
+  const model = modelInput.value.trim()
+  if (!model || /^-/u.test(model) || /\s|[\u0000-\u001f\u007f]/u.test(model)) { recapStatus.textContent = 'Paste the identifier, not the display name. It cannot contain spaces.'; return }
+  void saveChoice(recapAgent.value, model)
+})
+recapAgent.addEventListener('change', () => { void saveChoice(recapAgent.value, '') })
 previewRecap.addEventListener('click', async () => {
   clearRecap()
   const revision = recapRevision
-  previewRecap.disabled = true
+  recapPending = true
+  updatePreviewControl()
   try {
     const p = await request('recap.preview', { agent: recapAgent.value })
     if (revision !== recapRevision) return
     recapToken = p.token
-    document.querySelector('#recap-destination').textContent = `${p.title} → ${p.agent} on ${p.environment} · ${p.prompt.length.toLocaleString()} characters including instructions`
+    document.querySelector('#recap-destination').textContent = `${p.title} → ${p.agent} / ${p.model || 'Agent default'} on ${p.environment} · ${p.prompt.length.toLocaleString()} characters including instructions`
     document.querySelector('#recap-text').textContent = p.prompt
     document.querySelector('#recap-preview').hidden = false
   } catch (error) { if (revision === recapRevision) recapStatus.textContent = message(error, 'Could not preview recap.') }
-  finally { previewRecap.disabled = !recapAgent.value }
+  finally { recapPending = false; updatePreviewControl() }
 })
 startRecap.addEventListener('click', async () => {
   const token = recapToken
   if (!token) return
   clearRecap()
-  startRecap.disabled = previewRecap.disabled = true
+  startRecap.disabled = recapPending = true
+  updatePreviewControl()
   try {
     const { focused } = await request('recap.start', { token })
     if (focused && dialog.open) dialog.close()
     else recapStatus.textContent = 'Recap session started. Select the new agent terminal to read its reply.'
   } catch (error) { recapStatus.textContent = message(error, 'Check Orca for a new agent session before trying again.') }
-  finally { startRecap.disabled = false; previewRecap.disabled = !recapAgent.value }
+  finally { startRecap.disabled = recapPending = false; updatePreviewControl() }
 })
 dialog.addEventListener('change', async ({ target }) => {
   if (!target.closest('.preference-group')) return
@@ -516,7 +589,7 @@ dialog.addEventListener('change', async ({ target }) => {
   }
 })
 api.settings.onDidChange(({ key }) => {
-  if (key === 'recapAgent') clearRecap()
+  if (key === 'recapAgent' || key === 'recapModel') clearRecap()
   if (dialog.open || key === 'showPanelIcon' || key === 'pauseWhileReading') void loadPreferences()
 })
 const exclusionsPanel = document.querySelector('#exclusions')

@@ -8,7 +8,7 @@ If you want to know where you left off, you only need the plugin and a local age
 2. For a quick trial, ask: **“I have six guests and eight chairs. How many chairs will be spare? Answer in one sentence.”** Wait for the answer. Leave the conversation tab selected; you don't have to close it.
 3. Open **Threadbrief** in the right sidebar. Under **From session history**, you should see the agent's answer about the two spare chairs. Switch to a different conversation and the panel follows that selection.
 
-In the default **Instant** mode the panel displays a reply the agent already wrote, in its original language. Opening it never starts a second model. It looks through the last 20 history entries for the latest assistant message with text, skips tool calls and short acknowledgements, and shows up to 1,600 characters before an ellipsis.
+Opening the panel displays a reply the agent already wrote, in its original language. It never starts a second model. The panel looks through the last 20 history entries for the latest assistant message with text, skips tool calls and short acknowledgements, and shows up to 1,600 characters before an ellipsis.
 
 No formatting prompt is required. Plain text keeps its line breaks. Markdown replies display headings, lists, tables, emphasis and code; command examples are selectable text, not actions. Web links open through Orca when you click them. File links keep their label and show the path on hover. HTML is displayed as text and remote images are not loaded.
 
@@ -16,13 +16,15 @@ No formatting prompt is required. Plain text keeps its line breaks. Markdown rep
 
 | Settings → Recap strategy | What it does | Extra model usage |
 | --- | --- | --- |
-| **Instant** (default) | Reads existing text. Use it to pick up where you left off. | None |
-| **Brief recap** | Sends up to 3,000 characters from the last 12 entries. Asks for goal, outcome and next step in up to 90 words. | One new agent session per confirmed request |
+| **Brief recap** (default) | Prepares up to 3,000 characters from the last 12 entries. Asks for goal, outcome and next step in up to 90 words. | One new agent session per confirmed request |
+| **Instant** | Reads existing text. Use it to pick up where you left off. | None |
 | **Detailed handoff** | Sends up to 12,000 characters from the last 48 entries. Asks for decisions, evidence, loose ends and next steps in up to 400 words. | One new session with a larger input and requested output |
 
-Select a **finished conversation**, open the gear and choose a strategy. Pick an Orca agent installed on the source host, then **Preview recap request**. Read the destination and the exact prompt, including the excerpt. Tool calls and tool output are left out; ordinary messages may still contain private information. **Start recap in new session** opens a separate agent terminal in that workspace. Select the new terminal to read the answer there or in Threadbrief. The source conversation and its saved report are not changed.
+Open the gear to choose an agent installed in the selected workspace, even while a turn is running. Once the conversation finishes, choose **Preview recap request**. Read the destination and the exact prompt, including the excerpt. Tool calls and tool output are left out; ordinary messages may still contain private information. **Start recap in new session** opens a separate agent terminal in that workspace. Select the new terminal to read the answer there or in Threadbrief. The source conversation and its saved report are not changed.
 
-The new session uses that agent’s configured account, default model and permissions, not necessarily the model override from your original tab. No provider key or second login goes into Threadbrief. Configure the agent’s default in Orca or its own settings. The prompt asks for a text-only answer; the plugin does not sandbox the agent. Character and word budgets are not token or price guarantees: provider, model, reasoning and account plan determine cost. Previewing, switching modes and refreshing the panel never launch a model. If history is disabled or the selection is excluded, no recap can start.
+**Choose a model:** keep **Model → Use agent’s default** to use your usual setup. To pin another model, choose **Add a model…**, copy its exact identifier from the agent’s model picker on the source host, and select **Use this model**. Future previews show the agent, model and host. Models you add stay in that agent’s dropdown; switching agents in the panel starts with the new agent’s default. To unpin, choose **Use agent’s default**. In Orca’s plugin settings the same selection is **Preferred recap agent** and **Custom recap model (optional)**. Saved choices are not a live catalog of your account’s models. Threadbrief does not retry a rejected launch with a different model.
+
+With the field empty the recap uses the agent’s default model, not necessarily the one in the original tab. It uses the agent’s configured account and permissions either way. The prompt asks for a text-only answer; the plugin does not sandbox the agent. Character and word budgets are not token or price guarantees. Previewing and refreshing never launch a model. If history is disabled or the selection is excluded, no recap can start.
 
 ## Choose what goes into the recap
 

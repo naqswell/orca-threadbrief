@@ -57,6 +57,13 @@ export function bindSources(orca, { settings, reveal, roots = [directory, legacy
   }
   const exclusions = createExclusions(orca, metadata, () => { completed.clear(); invalidate('exclusions') })
   const selector = id => /^(?:folder:|identity:wt2:)/u.test(id) ? id : `id:${id}`
+  async function recapTarget() {
+    const selected = await getFocus()
+    if (!selected?.workspace || !selected.host) throw Error('Select a workspace in Orca to list its agents.')
+    const environment = selected.host === 'local' ? 'local' : selected.host.startsWith('runtime:') ? selected.host.slice(8) : null
+    if (!safeEnvironment(environment) || (environment === 'local' && selected.host !== 'local')) throw Error('Could not identify the selected Orca server.')
+    return { environment, worktree: selector(selected.workspace) }
+  }
   async function remoteState(session, workspaceId) {
     const list = await command(['agent', 'list', '--environment', session.environment, '--worktree', selector(workspaceId)]).catch(() => null)
     const matches = !list?.truncated && list?.agents?.filter(a => a.paneKey === session.paneKey && sessionId(a.orcaSessionId) === session.id)
@@ -242,5 +249,5 @@ export function bindSources(orca, { settings, reveal, roots = [directory, legacy
     if (pane && pane === event.paneKey) invalidate('session')
   })
   function historyChanged() { completed.clear(); invalidate('history-setting') }
-  return { focused, workflowFocused, recapSource, close, frame, stop, exclusions, historyChanged }
+  return { focused, workflowFocused, recapTarget, recapSource, close, frame, stop, exclusions, historyChanged }
 }

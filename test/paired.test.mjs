@@ -20,7 +20,7 @@ test('paired history and generation target only the confirmed peer; disconnect, 
   }
   const settings = async () => ({ pairedHistory: enabled, summaryStrategy: 'brief' })
   const sources = bindSources(orca, { settings, command, focus, roots: [], reveal() {} }); t.after(sources.stop)
-  bindRecaps(orca, { settings, command, source: sources.recapSource })
+  bindRecaps(orca, { settings, command, target: sources.recapTarget, source: sources.recapSource })
   assert.equal((await sources.focused()).outcome, 'The peer outcome.')
   const preview = await handlers['recap.preview']({ agent: 'remote-agent' })
   assert.equal(preview.environment, 'peer')
@@ -38,8 +38,21 @@ test('paired history and generation target only the confirmed peer; disconnect, 
   enabled = true
   await sources.exclusions.set({ kind: 'session', host: 'peer', id: 'same', excluded: true })
   assert.equal((await sources.focused()).excluded, 'session')
-  await assert.rejects(handlers['recap.agents'](), /off/)
   assert.deepEqual(calls, [])
+  assert.deepEqual((await handlers['recap.agents']()).map(a => a.id), ['remote-agent'])
+  assert.deepEqual(calls, [['agent', 'installed', '--environment', 'peer', '--worktree', workspaceId]])
+  await assert.rejects(handlers['recap.preview']({ agent: 'remote-agent' }), /off/)
+  assert.ok(calls.every(c => c[1] === 'installed'))
+})
+
+test('an unknown workspace host cannot list local agents', async t => {
+  let host = 'ssh:other'
+  const commands = []
+  const orca = { panels: { handle() {} }, events: { on() {} } }
+  const sources = bindSources(orca, { focus: async () => ({ host, workspace: 'folder:room' }), command: async args => commands.push(args) })
+  t.after(sources.stop)
+  for (host of ['ssh:other', 'runtime:local']) await assert.rejects(sources.recapTarget(), /identify the selected Orca server/)
+  assert.deepEqual(commands, [])
 })
 
 test('changing selection, strategy or history access during a paired lookup cancels the pending operation', async t => {
@@ -60,7 +73,7 @@ test('changing selection, strategy or history access during a paired lookup canc
   const settings = async () => ({ summaryStrategy: strategy, pairedHistory: allowed })
   const sources = bindSources(orca, { settings, command, focus, roots: [] })
   t.after(sources.stop)
-  bindRecaps(orca, { settings, command, source: sources.recapSource })
+  bindRecaps(orca, { settings, command, target: sources.recapTarget, source: sources.recapSource })
   const preview = await handlers['recap.preview']({ agent: 'writer' })
   duringLookup = () => { leaf = 'second' }
   await assert.rejects(handlers['recap.start'](preview), /selection changed/)

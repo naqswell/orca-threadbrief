@@ -1,16 +1,19 @@
 # Threadbrief for Orca
 
-Pick up where you left off. Select an agent tab in Orca and open **Threadbrief** in the right sidebar. By default, the panel shows the last substantive reply from that session once the agent finishes. No workflow profile, API key or report file is required.
+Threadbrief puts the selected Orca session’s last finished reply in the sidebar. Switch tabs and the brief follows. If the agent starts another turn, you can keep reading the previous result. Opening the panel makes no model call.
 
-**[Start here: get your first summary](docs/getting-started.md)**. Try a short task, see exactly what appears, and learn how to ask for a three-line handoff in your own language.
+<picture>
+  <source media="(prefers-reduced-motion: reduce)" srcset="assets/threadbrief-demo.png">
+  <img src="assets/threadbrief-demo.gif" alt="Threadbrief shows the workshop notes from session history. Switching to Workshop invite shows its saved Goal, Done and Next. The handoff stays visible with an Agent working indicator during a new turn." width="960">
+</picture>
 
-![Threadbrief cover: a thread leads to three notes labeled Goal, Done and Next.](assets/threadbrief-cover.png)
+**[Install](#install)** · [Try it with your first session](docs/getting-started.md) · [Compare recap strategies](docs/getting-started.md#choose-a-strategy-and-an-agent)
 
 **Paired Orca servers:** install Threadbrief on the desktop that shows the panel. It reads the selected session from its own paired server and starts a recap there only after a preview. No plugin installation on the server is required. Report files, exclusions and workflow profiles do not sync between machines. [Paired setup and limitations](docs/getting-started.md#using-a-paired-orca-server).
 
 ## Install
 
-Requires Orca **1.4.268** or newer. Enable plugins under **Settings → Plugins**. Once the repository is published, install from GitHub:
+Requires Orca **1.4.268** or newer. Enable plugins under **Settings → Plugins**, then install from GitHub:
 
 ```sh
 orca plugin install naqswell/orca-threadbrief --json
@@ -28,7 +31,7 @@ A folder installation uses `local.session-summary` instead. **If you already use
 
 ## Settings
 
-Click the gear beside the task title. **Instant** shows existing text without a model call. For a new summary, choose **Brief recap** or **Detailed handoff**, select an installed Orca agent, and preview the exact excerpt before starting its separate session. The agent uses its existing account and model configuration. [Compare strategies and costs](docs/getting-started.md#choose-a-strategy-and-an-agent).
+Click the gear beside the task title. **Brief recap** (default) asks for up to 90 words; **Detailed handoff** asks for up to 400. Choose an installed agent and keep **Use agent’s default**, or pin a model under **Model → Add a model…**. Check the agent, model, host and excerpt before starting. **Instant** only shows existing text. [Compare strategies and costs](docs/getting-started.md#choose-a-strategy-and-an-agent).
 
 **Excluded summaries** skips history and saved reports for a session, workspace or project. Remove any rule there to resume. For saved reports only, turn off **Use the agent’s last reply**.
 

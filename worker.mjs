@@ -30,7 +30,7 @@ export default function activate(orca) {
   orca.panels.handle('frame', sources.frame)
   orca.panels.handle('exclusions.list', sources.exclusions.list)
   orca.panels.handle('exclusions.set', sources.exclusions.set)
-  const revokeRecap = bindRecaps(orca, { settings, source: sources.recapSource, command: orcaJson })
+  const revokeRecap = bindRecaps(orca, { settings, target: sources.recapTarget, source: sources.recapSource, command: orcaJson })
   const accept = bindProfiles(orca, { settings, focused: sources.workflowFocused })
   const pluginDir = dirname(dirname(fileURLToPath(import.meta.url)))
   const key = basename(pluginDir), plugins = dirname(pluginDir)
@@ -39,7 +39,7 @@ export default function activate(orca) {
     if (released) stop(); else stopImports = stop
   }).catch(error => orca.log(error.message))
   const subscription = orca.settings.onDidChange(({ key }) => {
-    if (['historyOutcome', 'pairedHistory', 'summaryStrategy', 'recapAgent'].includes(key)) revokeRecap()
+    if (['historyOutcome', 'pairedHistory', 'summaryStrategy', 'recapAgent', 'recapModel'].includes(key)) revokeRecap()
     if (key === 'historyOutcome' || key === 'pairedHistory') sources.historyChanged()
     else if (key === 'profileActions' || key === 'commandAction') orca.panels.post('summary.changed', { reason: 'settings' })
   })

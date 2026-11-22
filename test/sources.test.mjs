@@ -55,7 +55,7 @@ test('migration, history and worktree follow the selected session', async t => {
   const f = await fixture(t)
   await save(f.roots[1], ['sessions', 'local'], sessionFilename('first'), record('Old session'))
   await save(f.roots[1], [], filename(workspaceId), record('Shared worktree'))
-  let view = await f.sources.focused({ listen: true })
+  let view = await f.sources.focused()
   assert.equal(view.scope, 'session')
   assert.equal(view.summary.goal, 'Old session')
   assert.equal(view.workspaceId, workspaceId)
@@ -119,13 +119,15 @@ test('agent events invalidate the selected session', async t => {
   f.sources.close()
 })
 
-test('a newly written session summary refreshes listeners', async t => {
+test('listeners refresh after a report is written or the selected session changes', async t => {
   const f = await fixture(t)
   await f.sources.focused({ listen: true })
   await save(f.roots[0], ['sessions', 'local'], sessionFilename('first'), record('Fresh'))
-  for (let i = 0; i < 100 && !f.posted.length; i++) await new Promise(resolve => setTimeout(resolve, 10))
-  assert.equal(f.posted.at(-1)?.[1].reason, 'file')
+  await t.waitFor(() => assert.equal(f.posted.at(-1)?.[1].reason, 'file'))
   assert.equal((await f.sources.focused()).summary.goal, 'Fresh')
+  f.setFocus({ workspace: workspaceId, host: 'local', tab: 'terminal-two', leaf: 'leaf', kind: 'terminal' })
+  await t.waitFor(() => assert.equal(f.posted.at(-1)?.[1].reason, 'selection'))
+  assert.equal((await f.sources.focused()).outcome, 'A substantive outcome.')
 })
 
 test('rejects symlinks and strips old publication commands', async t => {

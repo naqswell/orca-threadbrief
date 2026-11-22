@@ -27,12 +27,19 @@
     </fieldset>
     <fieldset class="preference-group" disabled>
       <legend>Recap strategy</legend>
-      <label>Mode <select name="summaryStrategy"><option value="instant">Instant · no model call</option><option value="brief">Brief recap</option><option value="handoff">Detailed handoff</option></select></label>
+      <label>Mode <select name="summaryStrategy"><option value="brief">Brief recap</option><option value="handoff">Detailed handoff</option><option value="instant">Instant · no model call</option></select></label>
     </fieldset>
     <p id="strategy-hint"></p>
     <div id="recap-controls" hidden>
-      <label>Orca agent <select id="recap-agent"></select></label>
-      <small>Uses this agent’s configured model, account and tool permissions. Only start a session if you want its provider to receive the preview below.</small>
+      <label>Orca agent <select id="recap-agent" aria-describedby="agent-hint" disabled><option value="">Loading agents…</option></select></label>
+      <small id="agent-hint" role="status"></small>
+      <label>Model <select id="model-choice" disabled><option value="">Use agent’s default</option></select></label>
+      <form id="recap-model-form" hidden>
+        <label>Model identifier <input id="recap-model" required maxlength="256" spellcheck="false" autocomplete="off" aria-describedby="model-help"></label>
+        <small id="model-help"></small>
+        <button type="submit" disabled>Use this model</button>
+      </form>
+      <small>The selected agent uses its configured account and tool permissions. Starting a recap sends the preview below to its provider.</small>
       <button id="preview-recap" type="button">Preview recap request</button>
       <div id="recap-preview" hidden>
         <p id="recap-destination"></p>

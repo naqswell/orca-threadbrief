@@ -79,8 +79,9 @@ dialog details > summary { padding: 6px 0; font-weight: 600 }
 #workflow-profiles summary small { margin-inline-start: 4px; font-weight: 400 }
 #command-order { display: block; margin: 6px 0 }
 .profile-tools { justify-content: flex-start }
-form { border-top: 1px solid var(--edge); margin-top: 16px; padding-top: 12px }
-form > label, .step label { display: block; margin-top: 10px }
+#profile-form { border-top: 1px solid var(--edge); margin-top: 16px; padding-top: 12px }
+#profile-form > label, .step label { display: block; margin-top: 10px }
+#recap-model-form { display: grid; gap: 6px }
 input:not([type=checkbox]):not([type=file]), textarea, select { display: block; width: 100%; padding: 5px; border: 1px solid var(--edge); border-radius: var(--radius); background: var(--orca-background, #fff) }
 textarea { resize: vertical }
 fieldset { border: 1px solid var(--edge) }
