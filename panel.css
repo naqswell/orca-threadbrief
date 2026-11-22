@@ -42,8 +42,8 @@ nav { display: flex; gap: 12px; flex-wrap: wrap }
 nav button { padding: 0; border: 0; background: none; text-decoration: underline }
 #reader-tools { position: sticky; inset-block-start: 0; z-index: 2; display: flex; align-items: center; justify-content: flex-end; gap: 4px; margin: -12px -14px 8px; padding: 4px 10px; background: var(--orca-background, #fff) }
 #reader-tools button { display: inline-flex; align-items: center; justify-content: center; min-height: 30px; border-radius: var(--radius); font-size: 12px; font-weight: 600 }
-#handoff-hint { visibility: hidden; position: absolute; inset-block-start: calc(100% - 4px); inset-inline-end: 10px; width: max-content; max-width: min(30ch, calc(100% - 20px)); padding: 6px 9px; border: 1px solid var(--edge); border-radius: var(--radius); background: var(--orca-background, #fff); font-size: 12px; line-height: 1.45 }
-.handoff-control:hover #handoff-hint, #open-handoff:focus-visible + #handoff-hint { visibility: visible }
+#reader-tools [role="tooltip"] { visibility: hidden; position: absolute; inset-block-start: calc(100% - 4px); inset-inline-end: 10px; width: max-content; max-width: min(30ch, calc(100% - 20px)); padding: 6px 9px; border: 1px solid var(--edge); border-radius: var(--radius); background: var(--orca-background, #fff); font-size: 12px; line-height: 1.45 }
+#reader-tools button:is(:hover, :focus-visible) + [role="tooltip"], #reader-tools button:not([hidden]) + [role="tooltip"]:hover { visibility: visible }
 #open-settings { position: relative; width: 30px; padding: 0; border: 0; color: var(--orca-muted-foreground, inherit); background: transparent }
 #refresh-brief { gap: 5px; padding: 2px 9px; border-color: var(--edge); background: var(--orca-secondary, transparent) }
 #refresh-brief[data-pending] { color: var(--orca-primary, currentColor); border-color: currentColor }

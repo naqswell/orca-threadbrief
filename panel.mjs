@@ -122,7 +122,7 @@ function drawSummary(view, workflow) {
     node('p', 'Keep the goal, result, confirmation and next step together as this session progresses.', empty, 'muted')
     if (!['historyOff', 'pairedOff', 'unavailable'].includes(view.emptyReason)) {
       const create = button(empty, 'Create report…', openHandoff)
-      create.disabled = Boolean(view.working)
+      create.id = 'create-report'
       if (view.working) node('small', 'Available when the agent finishes this turn.', empty)
     }
     if (view.outcome) {
@@ -269,7 +269,16 @@ function drawWorkflow(workflow, draftKey) {
 }
 const loading = document.querySelector('#loading')
 let draftFocus
+let handoffTarget
+function setHandoffTarget(view) {
+  const revision = view?.summary ? view.summary.checkpoint?.revision : 0
+  handoffTarget = view?.reportSessionKey && !view.working && revision !== undefined ? {sessionKey:view.reportSessionKey, revision} : null
+  const create = document.getElementById('create-report')
+  if (create) create.disabled = handoffTarget?.revision !== 0
+  handoffButton.disabled = !handoffTarget?.revision
+}
 function showLoading(leaving = false) {
+  setHandoffTarget(null)
   if (main.getAttribute('aria-busy') !== 'true') {
     const field = document.activeElement
     const editor = field?.closest('details[data-draft-key]')
@@ -296,7 +305,6 @@ function pendingUpdate(pending) {
   if (refreshBrief.hasAttribute('data-pending') === pending) return
   refreshBrief.toggleAttribute('data-pending', pending)
   refreshBrief.querySelector('span').textContent = pending ? 'Update available' : 'Refresh'
-  refreshBrief.title = pending ? 'Refresh brief to read the update' : 'Refresh brief'
 }
 function resetReader() {
   manualKey = undefined
@@ -319,6 +327,7 @@ async function refresh(leaving = false, apply = true, loadFor) {
   if (loadFor) manualLoad.disabled = true
   listening = true
   const input = loadFor ? { loadFor } : {}
+  let confirmed
   try {
     const [result, workflowResult] = await Promise.all([
       request('summary.focused', { listen: true, ...input }),
@@ -337,7 +346,6 @@ async function refresh(leaving = false, apply = true, loadFor) {
     manualLoad.hidden = !welcome || !manualKey
     refreshBrief.hidden = welcome || view.scope === 'excluded' || (view.scope === 'none' && !manualKey)
     handoffControl.hidden = view.scope !== 'session' || !view.summary?.checkpoint
-    handoffButton.disabled = Boolean(working)
     activity.hidden = !working || view.manual
     sourceHint = working ? 'Choose an agent now. Preview is available when this turn finishes.' :
       view.scope === 'excluded' ? 'Summaries are off for this selection.' :
@@ -345,7 +353,7 @@ async function refresh(leaving = false, apply = true, loadFor) {
       view.scope === 'none' ? 'Select a finished agent conversation to preview a recap.' : ''
     updatePreviewControl()
     const key = JSON.stringify([view, !view.summary && working, workflow, workflowResult.error?.message, original?.key && dirtyDrafts.has(original.key)])
-    if (key === rendered && contextKey === displayedContext) { pendingUpdate(false); return }
+    if (key === rendered && contextKey === displayedContext) { confirmed = result; pendingUpdate(false); return }
     if (!apply && !leaving && displayedContext === contextKey && view.scope !== 'excluded' && holdUpdate()) {
       pendingUpdate(true)
       return
@@ -364,6 +372,7 @@ async function refresh(leaving = false, apply = true, loadFor) {
     if (workflowResult.error) node('p', message(workflowResult.error, 'Could not load workflow actions.'), main)
     const nextEditor = main.querySelector('details[data-draft-key]')
     if (nextEditor?.dataset.draftKey === openKey) nextEditor.open = true
+    confirmed = result
   } catch (error) {
     if (ticket !== generation || document.hidden) return
     if (!leaving && !apply && holdUpdate()) { pendingUpdate(true); return }
@@ -373,6 +382,7 @@ async function refresh(leaving = false, apply = true, loadFor) {
     node('p', message(error, 'Could not load summary.'), main)
   } finally {
     if (ticket === generation && !document.hidden) {
+      setHandoffTarget(confirmed)
       manualLoad.disabled = false
       loading.hidden = true
       main.inert = false
@@ -393,6 +403,7 @@ async function refresh(leaving = false, apply = true, loadFor) {
 }
 function pause() {
   generation++
+  setHandoffTarget(null)
   main.inert = true
   main.hidden = true
   resetReader()
@@ -768,10 +779,20 @@ document.querySelector('#open-settings').addEventListener('click', () => openSet
 const handoff = document.querySelector('#handoff-dialog'), checkpointStatus = document.querySelector('#checkpoint-status')
 const saveCheckpoint = document.querySelector('#save-checkpoint'), checkpointTarget = document.querySelector('#checkpoint-target')
 const handoffControl = document.querySelector('.handoff-control')
-const handoffButton = document.querySelector('#open-handoff'), handoffHint = document.querySelector('#handoff-hint')
-handoffButton.addEventListener('pointerenter', () => { handoffHint.hidden = false })
-handoffButton.addEventListener('focus', () => { handoffHint.hidden = false })
-document.addEventListener('keydown', event => { if (event.key === 'Escape') handoffHint.hidden = true })
+const handoffButton = document.querySelector('#open-handoff')
+let activeHint
+for (const control of [refreshBrief, handoffButton]) {
+  const hint = document.getElementById(control.getAttribute('aria-describedby'))
+  const show = () => {
+    if (activeHint) activeHint.hidden = true
+    activeHint = hint
+    hint.hidden = false
+  }
+  control.addEventListener('pointerenter', show)
+  control.addEventListener('focus', show)
+  control.addEventListener('click', () => { hint.hidden = true })
+}
+document.addEventListener('keydown', event => { if (event.key === 'Escape' && activeHint) activeHint.hidden = true })
 let handoffVisit = 0, checkpointKey
 handoff.addEventListener('close', () => { ++handoffVisit; checkpointKey = undefined })
 document.querySelector('#close-handoff').addEventListener('click', () => handoff.close())
@@ -779,29 +800,38 @@ const draftInput = document.querySelector('#report-draft'), importDraft = docume
 function draftReady() { importDraft.disabled = !checkpointKey || !draftInput.value.trim() }
 draftInput.addEventListener('input', draftReady)
 handoffButton.addEventListener('click', openHandoff)
-async function openHandoff() {
-  handoffHint.hidden = true
+async function openHandoff(event) {
+  const expected = handoffTarget, control = event.currentTarget
+  if (!expected || (control === handoffButton) !== (expected.revision > 0) || handoff.open) return
   const visit = ++handoffVisit
+  control.disabled = true
   checkpointKey = undefined
   checkpointStatus.textContent = ''
   draftInput.value = ''
   draftReady()
   document.querySelector('#copy-checkpoint').disabled = true
   document.querySelector('#checkpoint-prompt').textContent = ''
-  checkpointTarget.textContent = 'Checking selected session…'
+  status.textContent = ''
   saveCheckpoint.disabled = true
-  handoff.showModal()
   try {
-    const target = await request('checkpoint.target')
-    if (visit !== handoffVisit || !handoff.open) return
-    if (target.manual) throw Error('This report is maintained by its writer. It cannot be replaced here.')
+    const target = await request('checkpoint.target', expected)
+    if (visit !== handoffVisit || expected !== handoffTarget || document.hidden || !control.isConnected) return
+    if (target.stale) {
+      await refresh(target.stale === 'session', true, target.stale === 'report' ? manualKey : undefined)
+      return
+    }
+    handoff.showModal()
     checkpointKey = target.key
     checkpointTarget.textContent = `${target.title} · ${target.environment === 'local' ? 'This desktop' : 'Paired server'}`
     document.querySelector('#checkpoint-prompt').textContent = checkpointPrompt(target)
     document.querySelector('#copy-checkpoint').disabled = false
     draftReady()
     saveCheckpoint.disabled = false
-  } catch (error) { if (visit === handoffVisit) checkpointTarget.textContent = message(error, 'Select a finished session with history enabled, then reopen the report.') }
+  } catch (error) {
+    if (visit === handoffVisit && expected === handoffTarget) status.textContent = message(error, 'Could not open the report.')
+  } finally {
+    if (visit === handoffVisit && expected === handoffTarget) control.disabled = false
+  }
 }
 document.querySelector('#copy-checkpoint').addEventListener('click', event => run(event.currentTarget,
   () => copyText(document.querySelector('#checkpoint-prompt').textContent), 'Copied. Paste into the original conversation.', 'Could not copy.', checkpointStatus))

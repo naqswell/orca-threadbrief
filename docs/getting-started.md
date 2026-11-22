@@ -14,9 +14,11 @@ No formatting prompt is required. Plain text keeps its line breaks. Markdown rep
 
 ### Load a brief only when you need it
 
-Turn on **Load briefs only on click** in the gear menu or Orca’s settings for Threadbrief. Select a session and click **Load brief**. When you leave and come back, Threadbrief restores what you last read, even if the agent has since replied. **Refresh**, pinned beside the gear, fetches the latest version. Expand a before/after pair to load its images.
+Turn on **Load briefs only on click** in the gear menu or Orca’s settings for Threadbrief. Select a session and click **Load brief**. When you leave and come back, Threadbrief restores what you last read, even if the agent has since replied. Hover over **Refresh** or focus it with Tab to see what it reloads. Clicking it reads existing material; it does not ask an agent to write a new report. Expand a before/after pair to load its images.
 
 The worker remembers the last 12 manually loaded sessions in memory, separately for each workspace and source host. Returning does not reread reports or conversation history. Restarting the worker, changing the history or load settings, or editing exclusions clears the remembered briefs. New worktrees do not auto-open in this mode. [Set this preference from an agent](configuration.md).
+
+Creating or updating a report checks the selected session and saved revision first. If another report was saved since you last looked, the panel loads it instead of opening the creation dialog.
 
 These buttons display existing material, including on a paired server. To ask a model for a new recap, use the preview and start buttons below. Turn off **Load briefs only on click** to resume automatic updates.
 

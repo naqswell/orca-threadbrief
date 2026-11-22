@@ -233,6 +233,7 @@ export function bindSources(orca, { settings, reveal, roots = [directory, legacy
       if (completed.size > 12) completed.delete(completed.keys().next().value)
     }
     if (!includePublication) { view.contextKey = manual ? loadKey : contextKey; view.working = working; view.manual = manual }
+    if (!includePublication && view.scope === 'session') view.reportSessionKey = contextKey
     if (view.scope !== 'none') view.workspaceId = workspaceId
     if (manual && loadFor && !excluded && (view.summary || view.outcome)) {
       const saved = manualBriefs.get(contextKey) ?? {}

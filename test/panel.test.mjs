@@ -11,10 +11,11 @@ import { promisify } from 'node:util'
 async function exercisePanel(defaults) {
   const $ = s => document.querySelector(s), delay = ms => new Promise(r => setTimeout(r, ms))
   const events = {}, prefs = { ...defaults }
-  const summary = title => ({ title, contextKey: title, scope: 'session', outcome: title + ' outcome' })
+  const summary = title => ({ title, contextKey: title, reportSessionKey:'peer/'+title, scope: 'session', outcome: title + ' outcome' })
   const loaded = new Map()
   let inventories = 0, frameReads = 0, waitForLoad
   let checkpointSaves = 0
+  let targetDelay
   let first, view = new Promise(resolve => { first = resolve })
   window.orca = {
     plugin: { on: (k, fn) => { events[k] = fn }, request: async (k, input) => {
@@ -29,12 +30,18 @@ async function exercisePanel(defaults) {
       }
       if (k === 'frame') { frameReads++; return null }
       if (k === 'workflow.view') return { state: 'none' }
-      if (k === 'checkpoint.target') return { key:'approved-turn', revision:2, format:prefs.reportFormat, title:'On demand', environment:'peer' }
+      if (k === 'checkpoint.target') {
+        const selected = view
+        if (targetDelay) await targetDelay
+        if (selected.reportSessionKey !== input.sessionKey) return {stale:'session'}
+        if ((selected.summary?.checkpoint?.revision ?? 0) !== input.revision || (selected.summary && !selected.summary.checkpoint)) return {stale:'report'}
+        return {key:'approved-turn', revision:input.revision, format:prefs.reportFormat, title:selected.title, environment:'peer'}
+      }
       if (k === 'checkpoint.capture') {
         if (input.key !== 'approved-turn') throw Error('Wrong checkpoint target')
         checkpointSaves++
-        view = { ...view, outcome:null, summary:{ goal:'Plan workshop', done:'Room booked', next:'Send invitations', checkpoint:{revision:3, decisions:'Room A', checks:'Capacity verified', open:'Guest count', formatted:'| Result | Check |\n|---|---|\n| Room booked | Capacity verified |'} } }
-        return { revision:3 }
+        view = { ...view, outcome:null, summary:{ goal:'Plan workshop', done:'Room booked', next:'Send invitations', checkpoint:{revision:1, decisions:'Room A', checks:'Capacity verified', open:'Guest count', formatted:'| Result | Check |\n|---|---|\n| Room booked | Capacity verified |'} } }
+        return { revision:view.summary.checkpoint.revision }
       }
       if (k === 'recap.agents') { inventories++; return [{ id: 'a', name: 'Agent A', preferred: true, catalogKey:'catalog-a' }, { id: 'b', name: 'Agent B', catalogKey:'catalog-b' }] }
       if (k === 'recap.evidence') return {token:'pick', choices:[{role:'assistant', excerpt:'Tickets', chars:7}]}
@@ -63,7 +70,26 @@ async function exercisePanel(defaults) {
   check(!$('main details').open && $('main').innerText.includes('No report yet') && !$('main').innerText.includes('First outcome'), 'Quotes presented as a report')
   $('main details summary').click()
   check($('main .history strong')?.innerText === '36 corrections' && $('main').innerText.indexOf('First outcome') < $('main').innerText.indexOf('36 corrections'), 'Earlier evidence missing or out of order')
+  const refreshHint = $('#refresh-hint')
+  $('#refresh-brief').focus()
+  check(getComputedStyle(refreshHint).visibility === 'visible' && $('#refresh-brief').getAttribute('aria-describedby') === refreshHint.id, 'Refresh description unavailable on keyboard focus')
+  document.dispatchEvent(new KeyboardEvent('keydown', {key:'Escape'}))
+  check(!refreshHint.getClientRects().length, 'Escape did not dismiss the Refresh description')
   let release
+  let allowTarget
+  targetDelay = new Promise(r => { allowTarget = r })
+  view = { ...summary('Already saved'), outcome:null, summary:{goal:'Workshop', done:'Room booked', next:'Send invites'} }
+  create().click()
+  check(!$('#handoff-dialog').open, 'Stale Create opened before Orca confirmed the current session')
+  changed('selection'); await delay(5)
+  allowTarget(); await delay(5); targetDelay = undefined
+  check(!$('main section button') && !$('#handoff-dialog').open && $('main').innerText.includes('Room booked'), 'Late preflight opened Create over a saved report')
+  view = summary('First'); changed('selection'); await delay(5)
+  view = new Promise(r => { release = r }); changed('session')
+  check(create().disabled, 'Create remained actionable while the next brief was loading')
+  create().click()
+  check(!$('#handoff-dialog').open, 'Disabled Create opened during a pending read')
+  release(summary('First')); await delay(5)
   view = new Promise(r => { release = r })
   changed('selection')
   await delay(370)
@@ -181,7 +207,8 @@ async function exercisePanel(defaults) {
   check(load.hidden && !refresh.hidden && $('main .prose p')?.textContent === 'Changed on host', 'Returning to a loaded session showed the welcome instead of its last read')
   check(canSave(), 'Restoring the session reply lost Save')
   view = { ...view, outcome: null, summary: { result: { pairs: [{ title: 'Example pair', before: 'a', after: 'b' }] } } }
-  refresh.click(); await delay(5)
+  create().click(); await delay(5)
+  check(!$('#handoff-dialog').open && !$('main .history') && $('main details'), 'A stale manual cache offered Create instead of loading the saved report')
   view = summary('Another session'); changed('selection'); await delay(5)
   view = summary('On demand'); changed('selection'); await delay(5)
   const pair = $('main details')
@@ -192,11 +219,11 @@ async function exercisePanel(defaults) {
   create().click(); await delay(5)
   const handoff = $('#handoff-dialog')
   check(handoff.open && handoff.scrollWidth <= handoff.clientWidth && handoff.innerText.includes('normal tokens') && $('#checkpoint-target').textContent.includes('Paired server') && !checkpointSaves, 'Opening handoff hid costs, the target, or captured without consent')
-  check($('#checkpoint-prompt').textContent.includes('Make a table of checks.') && $('#checkpoint-prompt').textContent.includes('\"revision\":3'), 'Copied instructions missed the custom format or base revision')
+  check($('#checkpoint-prompt').textContent.includes('Make a table of checks.') && $('#checkpoint-prompt').textContent.includes('\"revision\":1'), 'Copied instructions missed the custom format or base revision')
   $('#save-checkpoint').click(); await delay(5)
-  check(checkpointSaves === 1 && $('#checkpoint-status').textContent.includes('3 saved'), 'Explicit capture did not confirm the checkpoint')
+  check(checkpointSaves === 1 && $('#checkpoint-status').textContent.includes('1 saved'), 'Explicit capture did not confirm the checkpoint')
   $('#close-handoff').click()
-  check($('main .prose td')?.textContent === 'Room booked' && $('main').innerText.includes('revision 3') && !$('main header details').open && $('main header details').textContent.includes('Capacity verified'), 'Custom report or compact underlying facts missing')
+  check($('main .prose td')?.textContent === 'Room booked' && $('main').innerText.includes('revision 1') && !$('main header details').open && $('main header details').textContent.includes('Capacity verified'), 'Custom report or compact underlying facts missing')
 }
 
 const chrome = [process.env.CHROME_PATH, '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', '/usr/bin/google-chrome', '/usr/bin/chromium', process.env.ProgramFiles && join(process.env.ProgramFiles, 'Google/Chrome/Application/chrome.exe')].find(p => p && existsSync(p))

@@ -35,9 +35,12 @@ export function bindCheckpoints(orca, { source, command, settings, root = direct
     const fields = previous && { goal:previous.goal, done:previous.done, next:previous.next, ...(cp ? {revision:cp.revision, decisions:cp.decisions, checks:cp.checks, open:cp.open} : previous.result ? {checks:previous.result.checks} : {}) }
     return { key, fields, format, manual:Boolean(previous && !cp), revision:cp?.revision ?? 0 }
   }
-  orca.panels.handle('checkpoint.target', async () => {
-    const active = await source(), state = await base(active)
+  orca.panels.handle('checkpoint.target', async ({sessionKey, revision} = {}) => {
+    const active = await source()
+    if (sessionKey !== JSON.stringify([active.workspaceId, active.environment, active.id])) return {stale:'session'}
+    const state = await base(active)
     if ((await source()).key !== active.key) throw Error('The session or turn changed.')
+    if (state.manual || state.revision !== revision) return {stale:'report'}
     return { ...state, title: active.title || active.id, environment: active.environment }
   })
   async function save(active, expected, record, signal) {

@@ -23,7 +23,9 @@ async function setup(t) {
       return {orcaSessionId:state.returnId ?? state.id, state:state.working ? 'working' : state.noTranscriptState ? undefined : 'done', entries:state.entries}
     }
   })
-  return { state, root, legacyRoot, calls, target:handlers['checkpoint.target'], capture:handlers['checkpoint.capture'], importDraft:handlers['checkpoint.import'], saved:(env = state.environment) => readSnapshot(root, ['sessions',env], sessionFilename(state.id)) }
+  const saved = (env = state.environment) => readSnapshot(root, ['sessions',env], sessionFilename(state.id))
+  const target = async (input = {}) => handlers['checkpoint.target']({sessionKey:JSON.stringify([state.workspaceId, state.environment, state.id]), revision:(await saved())?.checkpoint?.revision ?? 0, ...input})
+  return { state, root, legacyRoot, calls, target, capture:handlers['checkpoint.capture'], importDraft:handlers['checkpoint.import'], saved }
 }
 
 test('checkpoint capture stays in the original local or paired session; newer snapshots replace, duplicates are harmless, old ones cannot roll back', async t => {
@@ -85,6 +87,18 @@ test('a checkpoint cannot replace or shadow an existing manual report', async t 
   await saveSession(f.root, 'local', 'same', manual)
   await assert.rejects(f.capture(target), /manually saved/)
   assert.equal((await f.saved()).done, 'Manual')
+})
+
+test('a Create click is bound to its displayed session, host and absence of a report', async t => {
+  const f = await setup(t), input = {sessionKey:JSON.stringify([f.state.workspaceId,'local','same']),revision:0}
+  f.state.environment = 'peer'
+  assert.deepEqual(await f.target(input), {stale:'session'})
+  f.state.environment = 'local'
+  const first = await f.target(input)
+  f.state.entries = [entry(block(1, 'Reserved'))]
+  await f.capture(first)
+  assert.deepEqual(await f.target(input), {stale:'report'})
+  assert.equal((await f.target({...input,revision:1})).fields.done, 'Reserved')
 })
 
 test('formatted drafts attach only to their original host, report and format; malformed changes leave the saved version alone', async t => {
