@@ -50,9 +50,10 @@ async function exercisePanel(defaults) {
   const canSave = () => $('#open-handoff').getClientRects().length > 0
   check(!canSave(), 'Save offered before the first brief loaded')
   check(initial.height > 0 && initial.height < 60 && !document.getAnimations().length && $('#loading').textContent.trim() === 'Loading summary…', 'First load was not a static, single-line status')
-  first(summary('First'))
+  first({...summary('First'), earlierReplies:['Checked **36 corrections**.']})
   await delay(10)
   check($('main h1')?.textContent === 'First', 'First session did not render')
+  check($('main .history strong')?.innerText === '36 corrections' && $('main').innerText.indexOf('First outcome') < $('main').innerText.indexOf('36 corrections'), 'Earlier work was missing, collapsed, or shown as the latest update')
   let release
   view = new Promise(r => { release = r })
   changed('selection')

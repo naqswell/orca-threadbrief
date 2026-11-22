@@ -1,6 +1,6 @@
 # Threadbrief for Orca
 
-Threadbrief puts the selected Orca session’s last finished reply in the sidebar. Switch tabs and the brief follows. If the agent starts another turn, you can keep reading the previous result. To have a model write a new recap, preview the request and start a separate agent session.
+Threadbrief puts recent replies from the selected Orca session in the sidebar. A final “sent” or “published” update stays next to the earlier reply explaining what changed. Switch tabs and the brief follows. To have a model write a new recap, preview the request and start a separate agent session.
 
 For a long task, choose **Save progress… → Copy instructions** and paste them into your next message in the same conversation. After the agent replies, **Save checkpoint** keeps its decisions, checks and next steps on your desktop. Writing uses that agent’s usual tokens, without a second recap session. [How checkpoints work](docs/getting-started.md#keep-a-running-handoff-in-the-same-session).
 
@@ -41,7 +41,7 @@ Prefer to load a brief yourself? Turn on **Load briefs only on click**. Click **
 
 **Configuring Threadbrief from an agent or terminal?** [Set preferences, choose a model, manage exclusions and profiles with JSON](docs/configuration.md). No developer mode or GUI automation required.
 
-**Excluded summaries** skips history and saved reports for a session, workspace or project. Remove any rule there to resume. For saved reports only, turn off **Use the agent’s last reply**.
+**Excluded summaries** skips history and saved reports for a session, workspace or project. Remove any rule there to resume. For saved reports only, turn off **Read recent agent replies**.
 
 Use **Orca Settings → Plugins → Threadbrief** or the panel gear for the same preferences: local/paired history, recap strategy, preferred agent, icon, auto-open, workflow commands and their order. In native Settings the preferred agent is its installed ID (empty uses the host default); the panel offers a live picker. Context-specific operations—excluding the selected item, editing profiles and previewing an actual recap—belong to the panel, not the native preference form.
 

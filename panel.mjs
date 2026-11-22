@@ -117,15 +117,20 @@ function drawSummary(view, workflow) {
   if (view.title) node('h1', view.title, header)
   if (view.outcome) {
     const section = node('section', undefined, main, 'history')
-    node('h2', 'Last agent reply', section)
+    node('h2', view.earlierReplies?.length ? 'Latest update' : 'Last agent reply', section)
     renderMarkdown(node('div', undefined, section), view.outcome, openProseLink)
+    if (view.earlierReplies?.length) {
+      const earlier = node('section', undefined, main, 'history')
+      node('h2', 'Earlier in this session', earlier)
+      for (const reply of view.earlierReplies) renderMarkdown(node('div', undefined, earlier), reply, openProseLink)
+    }
     return
   }
   const summary = view.summary
   if (!summary) {
     const hints = {
       waiting: view.manual ? 'No completed reply yet. Refresh after this turn finishes.' : 'No completed reply yet. The first one will appear here when this turn finishes.',
-      historyOff: 'No saved session report. Turn on “Use the agent’s last reply” to read its history.',
+      historyOff: 'No saved session report. Turn on “Read recent agent replies” to read this session’s history.',
       pairedOff: 'Paired history is off. Enable it in Settings or save a session report.',
       unavailable: 'Orca could not read this session’s history. Check the connection, then choose Refresh.',
       noReply: 'No finished reply was available when this brief loaded. Choose Refresh to check again.'
@@ -515,7 +520,7 @@ async function showStrategy(values, revision) {
   const instant = mode === 'instant'
   document.querySelector('#recap-mode-label').textContent = instant ? 'Instant' : mode === 'brief' ? 'Brief' : 'Detailed'
   document.querySelector('#strategy-hint').textContent = instant ? 'Shows existing text. No extra tokens or agent session.' :
-    `${mode === 'brief' ? 'Up to 12 recent entries and 3,000 characters; asks for up to 90 words.' : 'Up to 48 recent entries and 12,000 characters; asks for up to 400 words.'} Applies when you start a new recap, not when you refresh the last reply. Your agent’s usual pricing applies.`
+    `${mode === 'brief' ? 'Up to 12 recent entries and 3,000 characters; asks for up to 90 words.' : 'Up to 48 recent entries and 12,000 characters; asks for up to 400 words.'} Applies when you start a new recap, not when you refresh the brief. Your agent’s usual pricing applies.`
   document.querySelector('#recap-controls').hidden = instant
   if (instant || !dialog.open || !recapSettings.open) return
   const storedModel = (values.recapModel ?? '').trim()

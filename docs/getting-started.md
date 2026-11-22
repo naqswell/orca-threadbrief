@@ -8,7 +8,7 @@ If you want to know where you left off, you only need the plugin and a local age
 2. For a quick trial, ask: **“I have six guests and eight chairs. How many chairs will be spare? Answer in one sentence.”** Wait for the answer. Leave the conversation tab selected; you don't have to close it.
 3. Open **Threadbrief** in the right sidebar. Under **Last agent reply**, you should see the agent's answer about the two spare chairs. Switch to a different conversation and the panel follows that selection.
 
-Opening the panel displays a reply the agent already wrote, in its original language. It never starts a second model. The panel looks through the last 20 history entries for the latest assistant message with text, skips tool calls and short acknowledgements, and shows up to 1,600 characters before an ellipsis.
+The panel reads the agent’s own words, without starting another model. For example, if an agent reports the work it finished and then confirms delivery, you see the confirmation under **Latest update** and the work under **Earlier in this session**. Threadbrief shows up to three distinct replies from the 48 most recent history entries, newest first, up to 1,600 characters per reply. It skips tool calls and short acknowledgements. This is an excerpt, not a summary of the entire conversation.
 
 No formatting prompt is required. Plain text keeps its line breaks. Markdown replies display headings, lists, tables, emphasis and code; command examples are selectable text, not actions. Web links open through Orca when you click them. File links keep their label and show the path on hover. HTML is displayed as text and remote images are not loaded.
 
@@ -56,7 +56,7 @@ With the field empty the recap uses the agent’s default model, not necessarily
 
 ## Choose what goes into the recap
 
-The default is the agent's reply as written. To get a handoff instead, ask the agent before it finishes, or send a follow-up in the same conversation. The gear beside the task title opens **Settings → How to get your first summary → Copy prompt**. Copying does not send a message.
+By default, the panel quotes recent replies as written. To get a handoff instead, ask the agent before it finishes, or send a follow-up in the same conversation. The gear beside the task title opens **Settings → How to get your first summary → Copy prompt**. Copying does not send a message.
 
 > Sum up this task in my language. Use three short lines: Goal, Done, Next. Mention anything still unresolved. If nothing remains, say so.
 
@@ -78,10 +78,10 @@ The panel shows the first available source, not a blend of conversations:
 | --- | --- |
 | **Saved for this session** | A report explicitly written for this Orca session. It wins even if there is a newer reply. |
 | **Session handoff · checkpoint N** | A snapshot written in the original conversation and saved by you. It does not change when the agent replies again. |
-| **Last agent reply** | The selected agent’s latest substantive reply, not a recap. If the transcript has no usable reply yet, Threadbrief can use the last reply Orca reports for that same finished session. It never substitutes another session or server. |
+| **Last agent reply**, or **Latest update** and **Earlier in this session** | Recent replies from the selected session. If the transcript has no usable text, Threadbrief can show the last reply Orca reports for that same finished session. |
 | **Shared with this worktree** | A saved report for the checkout. It can include other sessions' work; it isn't attributed to the selected agent. |
 
-Turning off **Use the agent’s last reply** disables history, including manual recap previews. It doesn't delete anything. No history is sent to an agent unless you confirm the preview.
+Turning off **Read recent agent replies** disables history, including manual recap previews. It doesn't delete anything. No history is sent to an agent unless you confirm the preview.
 
 ## Using a paired Orca server
 
@@ -128,7 +128,7 @@ Skip this if history is enough. Use a saved report for a stable handoff or when 
 | **Agent working** | You can keep reading this session’s last completed reply or saved report. The unfinished turn is not a summary. If there is no previous result, the panel waits for the first one. |
 | **Update available** | You were reading when the same session changed. Click **Update available** in the top bar to read the new version. Switching sessions follows the new selection; turning off history or excluding it clears the old view immediately. |
 | You prefer a live view even while reading | Turn off **Pause updates while reading** in the gear under **Panel**, or in Orca’s plugin settings. Any pending result appears immediately; future updates no longer wait for **Refresh**. This does not start a model. |
-| The agent finished, but there is no history reply | Check **Use the agent’s last reply**. Ask for a short recap in the same tab. If Orca has no readable history for this session, use a saved report. |
+| The agent finished, but there is no history reply | Check **Read recent agent replies**, then choose **Refresh**. If Orca has no readable history for this session, use a saved report. |
 | A paired session has no reply | Check the paired connection, both history preferences and whether the agent finished. If the server does not expose that transcript, use a saved report. |
 | The panel shows a shared report or an older saved report | Check the source label above. A shared report belongs to the checkout. To change a saved session report, write it again for the same session ID. |
 

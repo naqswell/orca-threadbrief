@@ -12,23 +12,23 @@ function substantiveReply(text) {
   if (!reply || (reply.length <= 96 && acknowledgement.test(reply))) return null
   return reply.length > 1600 ? reply.slice(0, 1600).trimEnd() + '…' : reply
 }
-export function lastOutcome(history, id) {
-  if (history?.orcaSessionId !== id || history.state === 'working' || !Array.isArray(history.entries)) return null
-  return outcomeBefore(history.entries, history.entries.length)
-}
-function outcomeBefore(entries, end) {
+function transcriptBrief(history, id, working) {
+  if (history?.orcaSessionId !== id || !Array.isArray(history.entries) || (!working && history.state === 'working')) return null
+  const entries = history.entries
+  const end = working ? entries.findLastIndex(e => e.role === 'user' && e.kind === 'message') : entries.length
+  let brief = null
   for (let i = end - 1; i >= 0; i--) {
     const entry = entries[i]
     if (entry.role !== 'assistant' || entry.kind !== 'message' || entry.tools?.length) continue
     const reply = substantiveReply(entry.text)
-    if (reply) return reply
+    if (!reply) continue
+    if (!brief) brief = { outcome: reply, earlierReplies: [] }
+    else if (reply !== brief.outcome && !brief.earlierReplies.includes(reply)) {
+      brief.earlierReplies.push(reply)
+      if (brief.earlierReplies.length === 2) break
+    }
   }
-  return null
-}
-function previousOutcome(history, id) {
-  if (history?.orcaSessionId !== id || !Array.isArray(history.entries)) return null
-  const turn = history.entries.findLastIndex(e => e.role === 'user' && e.kind === 'message')
-  return outcomeBefore(history.entries, turn)
+  return brief
 }
 async function pairedAddress(id, command, environment) {
   if (typeof id !== 'string' || !/^[^:/]+::[^\0]+$/u.test(id)) return null
@@ -165,6 +165,7 @@ export function bindSources(orca, { settings, reveal, roots = [directory, legacy
       if (!revalidate) return saved.workflow
     }
     let working = false
+    let brief
     let view = session ? { scope: 'session', title: session.title, summary: null } : { scope: 'none', summary: null }
     checkGeneration(start)
     if (!includePublication) observedPane = current
@@ -191,10 +192,14 @@ export function bindSources(orca, { settings, reveal, roots = [directory, legacy
           if (!live) view.emptyReason = 'unavailable'
           else if (working || live.state === 'done') {
             checkGeneration(start)
-            const history = await command(['agent', 'read', `orca_session_id:${session.id}`, '--environment', session.environment, '--limit', '20']).catch(() => null)
-            const statusReply = !working && (!history || (history.orcaSessionId === session.id && history.state !== 'working')) ? live.lastAssistantMessage : undefined
-            const outcome = working ? previousOutcome(history, session.id) ?? completed.get(contextKey) : lastOutcome(history, session.id) ?? substantiveReply(statusReply)
-            if (outcome) view.outcome = outcome
+            const history = await command(['agent', 'read', `orca_session_id:${session.id}`, '--environment', session.environment, '--limit', '48']).catch(() => null)
+            brief = transcriptBrief(history, session.id, working)
+            if (!brief && working) brief = completed.get(contextKey)
+            if (!brief && !working && (!history || (history.orcaSessionId === session.id && history.state !== 'working'))) {
+              const outcome = substantiveReply(live.lastAssistantMessage)
+              if (outcome) brief = { outcome, earlierReplies: [] }
+            }
+            if (brief) Object.assign(view, brief)
             else view.emptyReason = working ? 'waiting' : !history ? 'unavailable' : 'noReply'
           } else view.emptyReason = 'noReply'
         }
@@ -222,9 +227,9 @@ export function bindSources(orca, { settings, reveal, roots = [directory, legacy
     }
     current.fingerprint = await fingerprint(current.files)
     await verifySelection(start, workspaceId, key)
-    if (view.outcome && completed.get(contextKey) !== view.outcome) {
+    if (brief && completed.get(contextKey) !== brief) {
       completed.delete(contextKey)
-      completed.set(contextKey, view.outcome)
+      completed.set(contextKey, brief)
       if (completed.size > 12) completed.delete(completed.keys().next().value)
     }
     if (!includePublication) { view.contextKey = manual ? loadKey : contextKey; view.working = working; view.manual = manual }

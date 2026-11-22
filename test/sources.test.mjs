@@ -51,6 +51,24 @@ test('a fresh install shows the finished reply without any profiles or summary f
   assert.equal(off.emptyReason, 'historyOff')
 })
 
+test('a short final update does not displace the work it confirms, even during the next turn', async t => {
+  const f = await fixture(t)
+  const message = text => ({role:'assistant', kind:'message', text})
+  const entries = ['Outside the brief', 'Booked the room.', 'Checked all 36 corrections.', 'Checked all 36 corrections.', 'Published the notes.', 'OK'].map(message)
+  entries.push({...message('Internal tool output'), tools:['lookup']})
+  f.setEntries(entries)
+  const brief = await f.sources.focused()
+  assert.equal(brief.outcome, 'Published the notes.')
+  assert.deepEqual(brief.earlierReplies, ['Checked all 36 corrections.', 'Booked the room.'])
+  f.setState('working')
+  f.setEntries([...entries, {role:'user', kind:'message', text:'New task'}, message('Unfinished draft')])
+  assert.deepEqual((await f.sources.focused()).earlierReplies, brief.earlierReplies)
+  f.setEntries([])
+  assert.deepEqual((await f.sources.focused()).earlierReplies, brief.earlierReplies)
+  f.setFocus({workspace:workspaceId, host:'local', tab:'other', leaf:'leaf', kind:'terminal'})
+  assert.equal((await f.sources.focused()).earlierReplies, undefined)
+})
+
 test('migration, history and worktree follow the selected session', async t => {
   const f = await fixture(t)
   await save(f.roots[1], ['sessions', 'local'], sessionFilename('first'), record('Old session'))

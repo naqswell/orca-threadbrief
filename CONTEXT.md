@@ -6,7 +6,7 @@ Threadbrief shows the outcome of work in Orca. The scope of a summary tells the 
 
 **Session summary**: A structured account of the goal, completed work and remaining work for one Orca agent session. Two sessions in the same worktree can have different summaries.
 
-**History outcome**: The last substantive reply from a completed agent session on its own Orca host, shown in the agent’s own words. It is not a generated or saved summary.
+**History outcome**: The selected session’s latest substantive agent reply, with up to two earlier replies for context. The panel quotes the agent; it does not generate or save a summary.
 
 **Session checkpoint**: A numbered handoff written by the original agent when asked, then saved by the reader on the desktop. Each revision replaces the previous one for that server and session. Saving one does not launch a recap agent.
 
