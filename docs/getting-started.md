@@ -16,7 +16,7 @@ No formatting prompt is required. Plain text keeps its line breaks. Markdown rep
 
 Turn on **Load briefs only on click** in the gear menu or Orca’s settings for Threadbrief. Select a session and click **Load brief**. When you leave and come back, Threadbrief restores what you last read, even if the agent has since replied. **Reload view** in the top bar checks for a newer saved summary or reply. It doesn’t create a summary. Expand a before/after pair to load its images.
 
-The worker remembers the last 12 manually loaded sessions in memory, separately for each workspace and source host. Returning does not reread reports or conversation history. Restarting the worker, changing the history or load settings, or editing exclusions clears the remembered briefs. New worktrees do not auto-open in this mode. [Set this preference from an agent](configuration.md).
+The worker remembers the last 12 manually loaded sessions in memory, separately for each workspace and source host. Returning does not reread reports or conversation history. It checks agent metadata to detect when a different session takes over the same terminal pane; that new session never inherits the old brief. Restarting the worker, changing the history or load settings, or editing exclusions clears the remembered briefs. New worktrees do not auto-open in this mode. [Set this preference from an agent](configuration.md).
 
 Creating or updating a report checks the selected session and saved revision first. If another report was saved since you last looked, the panel loads it instead of opening the creation dialog.
 
@@ -128,6 +128,8 @@ Skip this if history is enough. Use a saved report for a stable handoff or when 
 
    For a paired session, add `--environment NAME` after `SESSION_ID`. On success, the writer returns the environment and file path. It keeps the report under `.session-summary` in your home directory, not in the project. Running the writer again for the same session and environment replaces that report.
 4. Select that session. Under **Saved for this session** check **Goal**, **Result**, **Confirmation** and **Next**. With no recorded checks, Confirmation says **Not recorded**.
+
+Writes use a private SQLite lock beside the report. The operating system releases it if the writer exits unexpectedly; the lock file can remain. Do not delete it while a writer is active. The report itself remains JSON and is replaced atomically.
 
 ## If you don't see the result you expected
 

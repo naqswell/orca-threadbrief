@@ -155,14 +155,21 @@ export async function saveSession(root, environment, id, value, shouldReplace) {
     secure(await lstat(path), true)
   }
   const target = join(path, name), lockPath = target + '.lock', temporary = join(path, '.' + randomUUID())
-  const lock = await open(lockPath, 'wx', 0o600)
   try {
+    const file = await open(lockPath, 'wx', 0o600)
+    await file.close()
+  } catch (error) { if (error.code !== 'EEXIST') throw error }
+  secure(await lstat(lockPath), false)
+  const { DatabaseSync } = await import('node:sqlite')
+  // The transaction is only a process-owned lock; the report remains an atomic JSON file.
+  const lock = new DatabaseSync(lockPath)
+  try {
+    lock.exec('PRAGMA busy_timeout=0; BEGIN IMMEDIATE')
     await writeFile(temporary, serialized, { flag: 'wx', mode: 0o600 })
     if (shouldReplace && !await shouldReplace()) return target
     await rename(temporary, target)
   } finally {
-    await lock.close()
-    await rm(lockPath, { force: true })
+    lock.close()
     await rm(temporary, { force: true })
   }
   return target

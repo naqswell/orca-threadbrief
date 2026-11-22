@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { spawnSync } from 'node:child_process'
 import { bindCheckpoints } from '../session-checkpoint.mjs'
 import { readSnapshot, saveSession, sessionFilename } from '../store.mjs'
 
@@ -27,6 +28,23 @@ async function setup(t) {
   const target = async (input = {}) => handlers['checkpoint.target']({sessionKey:JSON.stringify([state.workspaceId, state.environment, state.id]), revision:(await saved())?.checkpoint?.revision ?? 0, ...input})
   return { state, root, legacyRoot, calls, target, capture:handlers['checkpoint.capture'], importDraft:handlers['checkpoint.import'], saved }
 }
+
+test('a terminated writer releases its lock and concurrent writes cannot bypass revision checks', async t => {
+  const f = await setup(t), record = {goal:'Plan', done:'Reserved', next:'Invite'}
+  const child = spawnSync(process.execPath, ['--input-type=module', '-e',
+    `import {saveSession} from ${JSON.stringify(new URL('../store.mjs', import.meta.url).href)}; await saveSession(${JSON.stringify(f.root)}, 'local', 'same', ${JSON.stringify(record)}, () => process.exit(0))`], {encoding:'utf8'})
+  assert.equal(child.status, 0, child.stderr)
+  await saveSession(f.root, 'local', 'same', record)
+  assert.equal((await f.saved()).done, 'Reserved')
+  let release, entered
+  const ready = new Promise(resolve => {entered = resolve})
+  const blocked = new Promise(resolve => {release = resolve})
+  const first = saveSession(f.root, 'local', 'same', {...record, done:'First'}, async () => {entered(); await blocked; return true})
+  await ready
+  try { await assert.rejects(saveSession(f.root, 'local', 'same', {...record, done:'Conflicting'})) }
+  finally { release(); await first }
+  assert.equal((await f.saved()).done, 'First')
+})
 
 test('checkpoint capture stays in the original local or paired session; newer snapshots replace, duplicates are harmless, old ones cannot roll back', async t => {
   const f = await setup(t)

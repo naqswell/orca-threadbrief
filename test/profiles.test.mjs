@@ -48,6 +48,29 @@ test('external import replaces by ID, only enables on request and never inherits
   assert.deepEqual((await s.request('profiles.list')).profiles.map(item => item.name), ['Renamed'])
 })
 
+test('profile IDs must be strings and rejected imports never poison saved profiles', async () => {
+  const s = setup()
+  for (const id of [123, ['team']]) await assert.rejects(s.accept({...profile, id}, false), /Invalid workflow profile/)
+  assert.deepEqual((await s.request('profiles.list')).profiles, [])
+  await s.accept({...profile, id:'123'}, false)
+  await s.remove('123')
+  assert.deepEqual((await s.request('profiles.list')).profiles, [])
+})
+
+test('profile commands support repository names with spaces and valid international Git branches', async () => {
+  const s = setup()
+  s.project.path = '/projects/My App'
+  await s.request('profiles.save', {profile})
+  for (const branch of ['feature/документация', 'feature/#123', 'feature/topic.locked/more']) {
+    s.workspace.branch = branch
+    const view = await s.request('workflow.view')
+    assert.equal(view.state, 'actions')
+    assert.ok(view.actions[0].command.endsWith(`'${branch}'`))
+  }
+  s.workspace.branch = 'feature/../invalid'
+  assert.equal((await s.request('workflow.view')).state, 'none')
+})
+
 const snapshot = () => ({cwd:tmpdir(), branch:'feature', repo:'books', mr:{base:'main', title:'Original', description:'First\nSecond'}})
 
 test('preview, matching, conflict and unrelated projects', async () => {

@@ -1,6 +1,14 @@
 import { Lexer } from './vendor/marked.mjs'
 
 const tags = { paragraph: 'p', blockquote: 'blockquote', strong: 'strong', em: 'em', del: 'del', list_item: 'li' }
+let entityDecoder
+function decodedText(text) {
+  return text.replace(/&(?:#[0-9]+|#x[0-9a-f]+|[a-z][a-z0-9]+);/giu, entity => {
+    entityDecoder ??= document.createElement('textarea')
+    entityDecoder.innerHTML = entity
+    return entityDecoder.value
+  })
+}
 
 function child(parent, tag) {
   const element = document.createElement(tag)
@@ -70,7 +78,7 @@ function appendTokens(parent, tokens, openLink) {
       default:
         if (Object.hasOwn(tags, t.type)) appendTokens(child(parent, tags[t.type]), t.tokens, openLink)
         else if (t.type === 'text' && t.tokens) appendTokens(parent, t.tokens, openLink)
-        else parent.append(t.text ?? t.raw)
+        else parent.append(t.type === 'text' ? decodedText(t.text ?? t.raw) : t.text ?? t.raw)
     }
   }
 }

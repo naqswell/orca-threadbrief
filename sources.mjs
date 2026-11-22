@@ -107,6 +107,10 @@ export function bindSources(orca, { settings, reveal, roots = [directory, legacy
       return s ? `${path}:${s.dev}:${s.ino}:${s.size}:${s.mtimeMs}:${s.ctimeMs}` : `${path}:missing`
     })).then(values => values.join('|'))
   }
+  async function checkManualSelection(current, selected = current.selected) {
+    const session = await resolve({workspaceId:current.workspaceId}, selected)
+    if (selection === current && (session?.id !== current.agent?.id || session?.environment !== current.agent?.environment)) invalidate('selection')
+  }
   async function tick() {
     if (checking || stopped || !listeners.size) return
     checking = true
@@ -116,7 +120,7 @@ export function bindSources(orca, { settings, reveal, roots = [directory, legacy
       const [selected, files] = await Promise.all([getFocus(), current.manual ? undefined : fingerprint(current.files)])
       if (selection !== current) return
       if (focusKey(selected) !== current.key) invalidate('selection')
-      else if (current.manual) return
+      else if (current.manual) await checkManualSelection(current, selected)
       else if (files !== current.fingerprint) invalidate('file')
       else if (current.monitor && Date.now() >= current.nextCheck) {
         current.nextCheck = Date.now() + 4000
@@ -144,13 +148,17 @@ export function bindSources(orca, { settings, reveal, roots = [directory, legacy
     current.agent = session
     const loadKey = manual && selected && (session || !workspaceId.startsWith('folder:'))
       ? JSON.stringify([workspaceId, key, session?.environment, session?.id]) : undefined
-    const welcome = () => {
+    const welcome = async () => {
+      await verifySelection(start, workspaceId, key)
       if (!includePublication) selection = current
       return { scope: 'manual', manual, contextKey: loadKey }
     }
     if (manual) {
       checkGeneration(start)
-      if (loadFor && (!loadKey || loadFor !== loadKey)) throw Error('The active selection changed. Load the brief again.')
+      if (loadFor && (!loadKey || loadFor !== loadKey)) {
+        if (selection) invalidate('selection')
+        throw Error('The active selection changed. Load the brief again.')
+      }
       if (!loadFor && (!manualBriefs.size || !loadKey)) return welcome()
     }
     const contextKey = JSON.stringify([workspaceId, session?.environment ?? selected?.host, session?.id ?? key])
@@ -297,10 +305,12 @@ export function bindSources(orca, { settings, reveal, roots = [directory, legacy
   })
   orca.events.on('agent.status.changed', event => {
     const current = selection ?? observedPane
-    if (current?.manual && current.agent) return
     if (!current || (event.workspaceId && event.workspaceId !== current.workspaceId && event.workspaceId !== current.selected?.workspace && event.workspaceListId !== current.workspaceId)) return
     const pane = current.agent?.paneKey ?? (current.selected?.tab && current.selected?.leaf ? `${current.selected.tab.replace(/^web-terminal-/u, '')}:${current.selected.leaf}` : null)
-    if (pane && pane === event.paneKey) invalidate(current.manual ? 'selection' : 'session')
+    if (pane && pane === event.paneKey) {
+      if (current.manual) void checkManualSelection(current)
+      else invalidate('session')
+    }
   })
   function historyChanged() { invalidate('history-setting') }
   return { focused, workflowFocused, recapTarget, recapSource, close, frame, stop, exclusions, historyChanged }

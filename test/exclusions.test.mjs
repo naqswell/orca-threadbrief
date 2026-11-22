@@ -19,7 +19,7 @@ async function fixture(t) {
     if (args[1] === 'read') { state.history++; return { orcaSessionId: state.historyId ?? state.session, state: state.transcriptState, entries: state.reply ? [{ role: 'assistant', kind: 'message', text: state.reply }] : [] } }
   }
   const restart = () => {
-    const api = bindSources(orca, { roots, settings: async () => ({ autoOpen: true, manualLoad: state.manual }), focus: async () => ({ workspace: state.id, host: state.host, tab: 'tab', leaf: 'leaf', kind: 'terminal', ...state.focus }), command, reveal: async () => { state.reveals++ } })
+    const api = bindSources(orca, { roots, settings: async () => ({ autoOpen: true, manualLoad: state.manual }), focus: async () => ({ workspace: state.id, host: state.host, tab: 'tab', leaf: 'leaf', kind: 'terminal', ...state.focus }), command, reveal: async () => { state.reveals++ }, interval:10 })
     t.after(api.stop)
     return api
   }
@@ -71,14 +71,16 @@ test('manual briefs do not touch reports or history until requested for the curr
 })
 
 test('a manual click cannot load a newly attached agent through the previous selection', async t => {
-  const { state, api } = await fixture(t)
+  const { state, api, orca } = await fixture(t)
   state.manual = true
-  const first = await api.focused()
+  const first = await api.focused({listen:true}), notifications = []
+  orca.panels.post = (_, data) => notifications.push(data.reason)
   state.session = 'b'
   const reads = [state.snapshots, state.history]
   await assert.rejects(api.focused({loadFor:first.contextKey}), /selection changed/)
   await assert.rejects(api.workflowFocused({loadFor:first.contextKey}), /selection changed/)
   assert.deepEqual([state.snapshots, state.history], reads)
+  assert.deepEqual(notifications, ['selection'])
   assert.notEqual((await api.focused()).contextKey, first.contextKey)
 })
 
@@ -96,6 +98,27 @@ test('a new agent tab offers no load action until Orca identifies its session', 
   const ready = await api.focused()
   assert.ok(ready.contextKey)
   assert.deepEqual([state.snapshots, state.history], [0, 0])
+})
+
+test('manual monitoring notices a replacement session without reading its reports or history', async t => {
+  const { state, api, events, orca } = await fixture(t)
+  state.manual = true
+  state.reply = 'Reply from A'
+  const initial = await api.focused({listen:true})
+  await api.focused({loadFor:initial.contextKey})
+  const counts = [state.snapshots, state.history], notifications = []
+  orca.panels.post = (_, data) => notifications.push(data.reason)
+  state.session = 'b'
+  events['agent.status.changed']({workspaceId:state.id, paneKey:'tab:leaf'})
+  await t.waitFor(() => assert.ok(notifications.includes('selection')))
+  assert.deepEqual([state.snapshots, state.history], counts)
+  assert.equal((await api.focused()).outcome, undefined)
+  state.session = 'a'
+  await api.focused()
+  notifications.length = 0
+  state.session = 'c'
+  await t.waitFor(() => assert.ok(notifications.includes('selection')))
+  assert.deepEqual([state.snapshots, state.history], counts)
 })
 
 test('on-demand A → B → A restores the last explicit read, not the latest history or a reused pane', async t => {

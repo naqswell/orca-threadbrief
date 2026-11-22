@@ -12,7 +12,7 @@ const digest = value => createHash('sha256').update(JSON.stringify(value)).diges
 const branchName = value => typeof value === 'string' ? value.replace(/^refs\/heads\//, '') : ''
 const plain = (value, max = 4096) => typeof value === 'string' && value.length <= max && !/[\u0000-\u0008\u000b-\u001f\u007f]/u.test(value)
 const line = (value, max = 512) => plain(value, max) && !/[\r\n]/u.test(value) && Boolean(value.trim())
-const ref = value => line(value, 512) && /^[A-Za-z0-9_][A-Za-z0-9._/-]*$/u.test(value) && !value.includes('..') && !value.includes('//') && !/[./]$/u.test(value)
+const ref = value => line(value, 512) && value !== '@' && !value.startsWith('-') && !/[\s~^:?*\[\\]/u.test(value) && !value.includes('..') && !value.includes('@{') && !value.endsWith('.') && value.split('/').every(part => part && !part.startsWith('.') && !part.endsWith('.lock'))
 const quote = (value, shell) => shell === 'powershell' ? `'${value.replaceAll("'", "''")}'` : `'${value.replaceAll("'", "'\\''")}'`
 
 function argvValid(argv, opener = false) {
@@ -25,7 +25,7 @@ function argvValid(argv, opener = false) {
 
 export function validate(profile) {
   if (!profile || typeof profile !== 'object' || Array.isArray(profile) ||
-      !/^[A-Za-z0-9_-]{1,128}$/u.test(profile.id ?? '') || !line(profile.name, 200) ||
+      typeof profile.id !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/u.test(profile.id) || !line(profile.name, 200) ||
       typeof profile.enabled !== 'boolean' || !line(profile.projectPrefix, 1024) ||
       !/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/u.test(profile.reviewHost ?? '') ||
       !['posix', 'powershell'].includes(profile.shell) || !Array.isArray(profile.steps) || profile.steps.length > 20 ||
@@ -147,7 +147,7 @@ export function bindProfiles(orca, { settings, focused }) {
     const projectMatches = (projectList.projects ?? []).filter(p => p.id === ws.projectId && p.hostId === 'local' && p.kind === 'git')
     if (projectList.truncated || projectMatches.length !== 1) return none
     const repo = basename(projectMatches[0].path)
-    if (!ref(repo) || !ref(branchName(ws.branch)) || (publication?.repo && publication.repo !== repo)) return none
+    if (!line(repo, 512) || !ref(branchName(ws.branch)) || (publication?.repo && publication.repo !== repo)) return none
     const proposed = publication?.mr
     const hasReviewStep = profile.steps.some(step => step.kind === 'review')
     const originalDraft = proposed && line(proposed.title, 1000) && plain(proposed.description, 16000) && ref(proposed.base)

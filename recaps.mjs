@@ -21,10 +21,9 @@ function evidenceFor(history, source, plan, base) {
       if (block && base.revision) {
         try {
           const checkpoint = JSON.parse(block[1])
-          if (Object.entries(base.fields).every(([key, value]) => checkpoint[key] === value)) { messages.length = 0; matched = true }
+          if (Object.entries(base.fields).every(([key, value]) => checkpoint[key] === value)) { messages.length = 0; matched = true; continue }
         } catch { /* An example or incomplete checkpoint is not a baseline. */ }
       }
-      continue
     }
     messages.push({ role:e.role, text:text.length > plan.chars ? text.slice(0, plan.chars - 1) + '…' : text })
   }

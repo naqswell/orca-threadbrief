@@ -20,16 +20,16 @@ To hand installation to your agent, send: **“Install Threadbrief for my Orca d
 Requires Orca **1.4.268** or newer. Enable plugins under **Settings → Plugins**, then install from GitHub:
 
 ```sh
-orca plugin install naqswell/orca-threadbrief --json
+orca plugin install naqswell/orca-threadbrief --environment local --json
 ```
 
 Orca asks for approval before running code. Review the publisher, repository and permissions, then run the approval command printed by your own installation. Open the panel from the sidebar or with:
 
 ```sh
-orca plugin open naqswell.session-summary --panel summary
+orca plugin open naqswell.session-summary --panel summary --environment local
 ```
 
-If you have the plugin source locally, run `orca plugin install . --json` from its directory instead. On Linux outside an Orca-managed terminal, use `orca-ide` in place of `orca` for the CLI examples.
+If you have the plugin source locally, run `orca plugin install . --environment local --json` from its directory instead. These commands target the desktop even when your shell selects a paired server. On Linux outside an Orca-managed terminal, use `orca-ide` in place of `orca` for the CLI examples.
 
 A folder installation uses `local.session-summary` instead. **If you already use that local plugin, do not install another folder under the same ID.** Install the GitHub version alongside it, check your existing reports, then disable the old plugin if you no longer need it. Do not delete your saved reports. The public release starts at `0.1.0`; it is not an in-place update to the older local series.
 

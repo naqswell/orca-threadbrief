@@ -61,6 +61,21 @@ test('a checkpoint bounds the evidence, missing continuity requires a choice, an
   assert.deepEqual(f.calls, [])
 })
 
+test('an unsaved checkpoint and a quoted marker remain selectable as new evidence', async () => {
+  const f = fixture()
+  f.state.strategy = 'brief'
+  const fields = {revision:1, goal:'Plan', done:'Venue reserved'}
+  f.state.base = {key:'draft-1', revision:1, fields}
+  const newer = 'Invitations sent.\n```threadbrief-checkpoint\n' + JSON.stringify({...fields, revision:2, done:'Invitations sent'}) + '\n```'
+  f.state.entries = [{kind:'message', role:'assistant', text:newer}, {kind:'message', role:'user', text:'What does ```threadbrief-checkpoint mean?'}]
+  const evidence = await f.evidence()
+  assert.equal(evidence.matched, false)
+  assert.equal(evidence.choices.length, 2)
+  const preview = await f.select(evidence, [0])
+  assert.match(preview.prompt, /Invitations sent/)
+  assert.deepEqual(f.calls, [])
+})
+
 for (const environment of ['local', 'peer']) {
   test(`pinned model on ${environment}: preview and launch agree; no fallback after refusal`, async () => {
     const f = fixture()
