@@ -10,6 +10,8 @@ If you want to know where you left off, you only need the plugin and a local age
 
 The panel displays a reply the agent already wrote, in its original language. It doesn't call a second model to summarize the conversation. It looks through the last 20 history entries for the latest assistant message with text, skips tool calls and short acknowledgements, and shows up to 1,600 characters before an ellipsis.
 
+No formatting prompt is required. Plain text keeps its line breaks. Markdown replies display headings, lists, tables, emphasis and code; command examples are selectable text, not actions. Web links open through Orca when you click them. File links keep their label and show the path on hover. HTML is displayed as text and remote images are not loaded.
+
 ## Choose what goes into the recap
 
 The default is the agent's reply as written. To get a handoff instead, ask the agent before it finishes, or send a follow-up in the same conversation. The gear beside the task title opens **Settings → How to get your first summary → Copy prompt**. Copying does not send a message.

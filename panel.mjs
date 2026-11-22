@@ -1,3 +1,5 @@
+import { renderMarkdown } from './summary-markdown.mjs'
+
 const api = window.orca
 const main = document.querySelector('main')
 const status = document.querySelector('#status')
@@ -59,11 +61,17 @@ async function copyText(text) {
     previous?.focus()
   }
 }
+function openProseLink(control, url) {
+  return run(control, () => openExternal(url), 'Link opened.', 'Could not open link.')
+}
 function fields(parent, rows) {
   const populated = rows.filter(([, value]) => value !== undefined && value !== null && value !== '')
   if (!populated.length) return
   const dl = node('dl', undefined, parent)
-  for (const [label, value] of populated) { node('dt', label, dl); node('dd', Array.isArray(value) ? value.join('\n') : value, dl) }
+  for (const [label, value] of populated) {
+    node('dt', label, dl)
+    renderMarkdown(node('dd', undefined, dl), Array.isArray(value) ? value.join('\n') : value, openProseLink, true)
+  }
 }
 function links(parent, items, skipReview = false) {
   if (!items || typeof items !== 'object') return
@@ -97,9 +105,9 @@ function drawSummary(view, workflow) {
   const header = node('header', undefined, main)
   if (view.title) node('h1', view.title, header)
   if (view.outcome) {
-    const section = node('section', undefined, main)
+    const section = node('section', undefined, main, 'history')
     node('h2', 'From session history', section)
-    node('p', view.outcome, section, 'history-outcome')
+    renderMarkdown(node('div', undefined, section), view.outcome, openProseLink)
     return
   }
   const summary = view.summary
@@ -129,14 +137,14 @@ function drawSummary(view, workflow) {
       node('h2', 'Open questions', questions)
       for (const question of result.questions) {
         const item = node('div', undefined, questions, 'question')
-        node('h3', question.question, item)
+        renderMarkdown(node('h3', undefined, item), question.question, openProseLink, true)
         fields(item, [['Owner', question.owner], ['Impact', question.impact]])
       }
     }
     if (result.noPair || result.pairs?.length) {
       const gallery = node('section', undefined, main)
       node('h2', 'Before and after', gallery)
-      if (result.noPair) node('p', result.noPair, gallery)
+      if (result.noPair) renderMarkdown(node('p', undefined, gallery), result.noPair, openProseLink, true)
       for (const pair of result.pairs || []) {
         const details = node('details', undefined, gallery)
         details.open = true

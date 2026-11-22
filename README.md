@@ -64,4 +64,6 @@ orca plugin validate . --json
 
 The [release checklist](docs/v0.1.0.md#release-gates) requires a clean Orca installation on macOS, Linux and Windows plus a separate migration check. Passing Node tests or manifest validation is not a substitute for those desktop checks.
 
+The panel tokenizes Markdown offline with [Marked 18.2.1](https://github.com/markedjs/marked/tree/v18.2.1). The browser module and its [license](vendor/marked.LICENSE) ship in `vendor/`; no CDN is used.
+
 [MIT license](LICENSE)

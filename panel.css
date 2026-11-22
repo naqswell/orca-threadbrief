@@ -7,7 +7,22 @@ h2 { font-size: 16px }
 h3 { font-size: 14px }
 p + p, dl, nav, .row, fieldset, .step, #project-preview:not(:empty) { margin-top: 10px }
 dt, figcaption { font-weight: 600; color: var(--orca-muted-foreground, #555) }
-dd, .history-outcome { white-space: pre-wrap }
+.history > h2 { margin-bottom: 8px; font-size: 12px; font-weight: 600; color: var(--orca-muted-foreground, #666) }
+.prose { line-height: 1.55; min-width: 0 }
+.prose :where(p, blockquote, pre, ul, ol, h3, h4, h5, h6) { margin: 0 }
+.prose > * + *, .prose blockquote > * + *, .prose li > * + * { margin-block-start: .6em }
+.prose :is(h3, h4, h5, h6) { font-size: 1em; line-height: 1.35 }
+.prose :is(ul, ol) { padding-inline-start: 1.5em }
+.prose li + li { margin-top: .15em }
+.prose blockquote { padding-inline-start: .8em; border-inline-start: 2px solid var(--edge) }
+.prose code { font: .9em/1.45 var(--orca-font-mono, monospace); background: var(--orca-secondary, #8882); border-radius: 4px; padding: .08em .28em; box-decoration-break: clone }
+.prose pre { padding: 8px 10px; background: var(--orca-secondary, #8882); border-radius: var(--radius); white-space: pre-wrap }
+.prose pre code { padding: 0; background: none; font-size: inherit }
+.prose-link { display: inline; max-width: 100%; padding: 0; border: 0; border-radius: 0; background: none; font: inherit; color: inherit; text-align: inherit; text-decoration: underline; text-underline-offset: .15em; overflow-wrap: anywhere }
+.prose-link:hover { text-decoration-thickness: 2px }
+.prose .table-scroll { overflow-x: auto }
+.prose table { border-collapse: collapse; font-size: .95em }
+.prose :is(th, td) { padding: 4px 7px; text-align: start; border: 1px solid var(--edge) }
 dt:not(:first-child), figure, .question { margin-top: 10px }
 section, footer { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--edge) }
 .result, .attention, .command { padding: 12px; border: 1px solid var(--edge); border-radius: var(--radius); background: var(--orca-card, transparent) }
